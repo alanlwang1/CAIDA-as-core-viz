@@ -94,14 +94,18 @@ def SetUpPosition():
 			max_value = value
 	print("maxValue:" + str(max_value) + "\n")
 
-	for AS in asns:
+	index = 0
+	while index < len(asns):
+		AS = asns[index]  
 		value = AS["customer_cone_asnes"]
 		#debugging - can remove later 
-		print(value)
+		#print(value)
 		#if asn has no longitude data, skip it and increment count 
 		if "longitude" not in AS:
 			noLongitude += 1
 			asns.remove(AS)
+			#move loop back one to account for removal
+			index -= 1
 			continue
 		#else perform angle calculation to determine location		
 		else:
@@ -133,6 +137,8 @@ def SetUpPosition():
 		AS["y"] = y
 		AS["size"] = size
 		AS["color"] = Value2Color(value/max_value)
+		#move loop forward
+		index += 1
 	#increase min max x y slightly, move all ASNes to adjust 
 	min_x += min_x*.05
 	min_y += min_y*.05
@@ -161,7 +167,7 @@ def SetUpPosition():
 	$link2rec{$link}{color} = Value2Color($value/$max_value);
 	}
 	'''
-	print ("ASNs with no longitude:" + str(noLongitude))
+	print ("ASNs with invalid data:" + str(noLongitude))
 	return min_x, min_y, max_x, max_y, max_value
 #method to determine the color of a link/node on the visualization
 def Value2Color(newValue):
@@ -182,13 +188,22 @@ def Value2Color(newValue):
 		sat = 100*temp
 		bri = 80*temp+20
 	#get rgb based on provided data
-	(r, g, b) = hsv2rgb(360*hue, sat, bri)
-	#create hexcode string 
-	for v in (r, g, b): 
+	rgbList = hsv2rgb(360*hue, sat, bri)
+
+	''' old ported hexcode - not applicable for cairo
+	for v in (r, g, b):
+		v = int(v) 
 		v = "%x" % int(v)
 		if (len(v) < 2):
 			v = "0"+ v
-	return str(r + g + b)
+	'''
+	#convert values to floating point to use with cairo
+	index = 0
+	while index < len(rgbList): 
+		v = rgbList[index]
+		rgbList[index] = float(v / 255)
+		index += 1
+	return rgbList
 #helper method for Value2Color to determine color of a link/node on the visualization
 def hsv2rgb (newH, newS, newV):  
 	h = newH
@@ -234,20 +249,21 @@ def hsv2rgb (newH, newS, newV):
 		r = v * 255;
 		g = v * 255 * (1 - s)
 		b = v * (255 - s * f)
-	return (r, g, b)
+	return [r, g, b]
 #method to print the visualization onto an image
 def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	# Make calls to PyCairo
 	#set up drawing area
-	WIDTH = int(max_x)
-	HEIGHT = int(max_y)
-	surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, HEIGHT, HEIGHT)
+	scale = 3
+	WIDTH = int(max_x) * scale
+	HEIGHT = int(max_y) * scale
+	surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
 	cr = cairo.Context(surface)
-	cr.scale(HEIGHT, HEIGHT)
+	#cr.scale(WIDTH, HEIGHT)
 
 	PrintHeader(cr, min_x,min_y,max_x,max_y)
 	PrintLinks(cr, max_value)
-	PrintNodes(cr, max_x, max_y)
+	PrintNodes(cr, scale)
 
 	# We do not need suppport for this now
 	#if (defined $name_file) {
@@ -266,18 +282,30 @@ def PrintHeader(cr, min_x,min_y,max_x,max_y):
 def PrintLinks(cr, max_value):
 	return
 #helper method for printGraph to print the nodes onto the image
-def PrintNodes(cr, max_x, max_y):
+def PrintNodes(cr, scale):
 	for AS in asns:
 		#calculate coordinates and get colors
-		x = AS["x"]/max_x
-		y = AS["y"]/max_y
-		size = AS["size"]/max_x
+		x = AS["x"] * scale 
+		y = AS["y"] * scale
+		#decrease size so that dots arent too big 
+		size = AS["size"] * scale 
 		color = AS["color"]
+		#save current context with no path
+		cr.save()
 		#plot point
-		cr.arc(x+size, y + size ,size, 0, 2*math.pi)
-		#set color later	
-		cr.set_source_rgb(0, 0, 1)
-		cr.fill()
+		#cr.arc(x+size, y + size ,size, 0, 2*math.pi)
+		cr.rectangle(x, y, size, size)
+		#fill with placeholder color - set actual color later
+		#debugging - remove later
+		#print(color)
+		cr.set_source_rgb(color[0], color[1], color[2])
+		cr.fill_preserve()
+		#outline	
+		cr.set_source_rgb(0, 0, 0)
+		cr.set_line_width(1.5)
+		cr.stroke()
+		#restore to saved context to wipe path
+		cr.restore()
 	return
 #run the main method
 main(sys.argv[1:])
