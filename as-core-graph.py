@@ -47,6 +47,7 @@ def ParseLinks(fname):
 	global links
 	if verbose:
 		print ("loading",fname)
+	links = jsonl_load(fname)
 #method to populate asn array with object data from asn file
 def ParseAsns(fname):
 	global verbose
@@ -77,6 +78,8 @@ def jsonl_load(filename):
 def SetUpPosition():
 	#count of asns with no longitude
 	noLongitude = 0
+	#count of invalid links
+	invalidLinks = 0
 	#bounds for graph
 	min_x = 0
 	min_y = 0
@@ -94,9 +97,11 @@ def SetUpPosition():
 			max_value = value
 	print("maxValue:" + str(max_value) + "\n")
 
-	index = 0
-	while index < len(asns):
-		AS = asns[index]  
+	asIndex = -1
+	while asIndex < len(asns) - 1:
+		#move loop forward
+		asIndex += 1
+		AS = asns[asIndex]  
 		value = AS["customer_cone_asnes"]
 		#debugging - can remove later 
 		#print(value)
@@ -105,7 +110,7 @@ def SetUpPosition():
 			noLongitude += 1
 			asns.remove(AS)
 			#move loop back one to account for removal
-			index -= 1
+			asIndex -= 1
 			continue
 		#else perform angle calculation to determine location		
 		else:
@@ -137,8 +142,6 @@ def SetUpPosition():
 		AS["y"] = y
 		AS["size"] = size
 		AS["color"] = Value2Color(value/max_value)
-		#move loop forward
-		index += 1
 	#increase min max x y slightly, move all ASNes to adjust 
 	min_x += min_x*.05
 	min_y += min_y*.05
@@ -149,7 +152,7 @@ def SetUpPosition():
 	max_y -= min_y
 	min_x = min_y = 0
 
-	#link stuff convert later
+	#link stuff
 	'''
 	foreach my $link (keys %link2rec) {
 	my $from = $link2rec{$link}{from};
@@ -167,8 +170,49 @@ def SetUpPosition():
 	$link2rec{$link}{color} = Value2Color($value/$max_value);
 	}
 	'''
+	linkIndex = 0
+	while linkIndex < len(links) - 1:
+		#move loop forward
+		linkIndex += 1
+		link = links[linkIndex]
+		#create pair of AS objects using asn number data in link
+		as1 = asSearch(link["asn0"])
+		as2 = asSearch(link["asn1"])
+		#if either AS is invalid, skip to next iteration
+		if as1 is None or as2 is None:
+			invalidLinks += 1
+			links.remove(link)
+			#move loop back one to account for removal
+			linkIndex -= 1
+			continue
+		asPair = (as1, as2)
+		print (asPair)
+		#find greatest value in the pair and assign to link
+		for AS in asPair:
+			value = AS["customer_cone_asnes"]
+			if "customer_cone_asnes" not in link:
+				link["customer_cone_asnes"] = value
+			elif value > link["customer_cone_asnes"]:
+				link["customer_cone_asnes"] = value
+		
+		#get coordinates
+		link["x1"] = as1["x"]
+		link["y1"] = as1["y"]
+		link["x2"] = as2["x"]
+		link["y2"] = as2["y"]
+		#calculate color
+		value = link["customer_cone_asnes"]
+		link["color"] = Value2Color(value/max_value)
+
+
 	print ("ASNs with invalid data:" + str(noLongitude))
+	print ("Links with invalid ASNs:" + str(invalidLinks))
 	return min_x, min_y, max_x, max_y, max_value
+#helper method to search for AS using number from link
+def asSearch(asNum):
+	for AS in asns:
+		if AS["asn"] == asNum:
+			return AS
 #method to determine the color of a link/node on the visualization
 def Value2Color(newValue):
 	value = newValue
@@ -203,7 +247,7 @@ def Value2Color(newValue):
 		v = rgbList[index]
 		rgbList[index] = float(v / 255)
 		index += 1
-	return rgbList
+	return (rgbList[0], rgbList[1], rgbList[2])
 #helper method for Value2Color to determine color of a link/node on the visualization
 def hsv2rgb (newH, newS, newV):  
 	h = newH
@@ -262,7 +306,7 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	#cr.scale(WIDTH, HEIGHT)
 
 	PrintHeader(cr, min_x,min_y,max_x,max_y)
-	PrintLinks(cr, max_value)
+	PrintLinks(cr, max_value, scale)
 	PrintNodes(cr, scale)
 
 	# We do not need suppport for this now
@@ -273,16 +317,37 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	#$max_x = PrintKey($max_x,$max_y, $max_value);
 	#}
 	#PrintEnder();
-	surface.write_to_png("graph.png") 
+	surface.write_to_png("graph1.png") 
 	return
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
    	return
 #helper method for printGraph to print the links onto the image
-def PrintLinks(cr, max_value):
+def PrintLinks(cr, max_value, scale):
+	seen = set()
+	for link in links:
+		#get information to draw line
+		x1 = link["x1"] * scale
+		y1 = link["y1"] * scale
+		x2 = link["x2"] * scale
+		y2 = link["y2"] * scale
+		color = link["color"]
+		linkInfo = ("links", x1, y1, x2, y2, color)
+		#skip if is duplicate
+		if linkInfo in seen:
+			continue
+		else:
+			seen.add(linkInfo)			
+			#draw line
+			cr.move_to(x1,y1)
+			cr.line_to(x2, y2)
+			cr.set_source_rgb(color[0], color[1], color[2])
+			cr.set_line_width(3)
+			cr.stroke()			
 	return
 #helper method for printGraph to print the nodes onto the image
 def PrintNodes(cr, scale):
+	seen = set()
 	for AS in asns:
 		#calculate coordinates and get colors
 		x = AS["x"] * scale 
@@ -290,22 +355,28 @@ def PrintNodes(cr, scale):
 		#decrease size so that dots arent too big 
 		size = AS["size"] * scale 
 		color = AS["color"]
-		#save current context with no path
-		cr.save()
-		#plot point
-		#cr.arc(x+size, y + size ,size, 0, 2*math.pi)
-		cr.rectangle(x, y, size, size)
-		#fill with placeholder color - set actual color later
-		#debugging - remove later
-		#print(color)
-		cr.set_source_rgb(color[0], color[1], color[2])
-		cr.fill_preserve()
-		#outline	
-		cr.set_source_rgb(0, 0, 0)
-		cr.set_line_width(1.5)
-		cr.stroke()
-		#restore to saved context to wipe path
-		cr.restore()
+		nodeInfo = ("nodes", size, x, y, color)
+		#skip if is duplicate
+		if nodeInfo in seen:
+			continue
+		else:
+			seen.add(nodeInfo)
+			#save current context with no path
+			cr.save()
+			#plot point
+			#cr.arc(x+size, y + size ,size, 0, 2*math.pi)
+			cr.rectangle(x, y, size, size)
+			#fill with placeholder color - set actual color later
+			#debugging - remove later
+			#print(color)
+			cr.set_source_rgb(color[0], color[1], color[2])
+			cr.fill_preserve()
+			#outline	
+			cr.set_source_rgb(0, 0, 0)
+			cr.set_line_width(2.5)
+			cr.stroke()
+			#restore to saved context to wipe path
+			cr.restore()
 	return
 #run the main method
 main(sys.argv[1:])
