@@ -78,6 +78,7 @@ def jsonl_load(filename):
 ###########################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition():
+	global links
 	#count of asns with no longitude
 	noLongitude = 0
 	#count of invalid links
@@ -107,8 +108,6 @@ def SetUpPosition():
 		asIndex += 1
 		AS = asns[asIndex]  
 		value = AS["customer_cone_asnes"]
-		#debugging - can remove later 
-		#print(value)
 		#if asn has no longitude data, skip it and increment count 
 		if "longitude" not in AS:
 			noLongitude += 1
@@ -194,8 +193,6 @@ def SetUpPosition():
 			linkIndex -= 1
 			continue
 		asPair = (as1, as2)
-		#debugging remove later
-		#print (asPair)
 		#find greatest value in the pair and assign to link
 		for AS in asPair:
 			value = AS["customer_cone_asnes"]
@@ -205,11 +202,23 @@ def SetUpPosition():
 				link["customer_cone_asnes"] = value
 		
 		#get coordinates
-		link["asPair"] = asPair
+		#get information to draw line
+		size1 = as1["size"]
+		size2 = as2["size"]
+		#center xy coordinates on the nodes
+		link["x1"] = as1["x"]+ (size1 / 2)
+		link["y1"] = as1["y"]+ (size1 / 2)
+		link["x2"] = as2["x"]+ (size2 / 2)
+		link["y2"] = as2["y"]+ (size2 / 2) 
+		#calculate distance for sorting
+		link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
 		#calculate color
 		value = link["customer_cone_asnes"]
 		link["color"] = Value2Color(value/max_value)
 
+	#sort links array by distance in descending order
+	newLinks = sorted(links, key = lambda link: link["distance"],reverse=True)
+	links = newLinks
 
 	print ("ASNs with invalid data:" + str(noLongitude))
 	print ("Links with invalid ASNs:" + str(invalidLinks))
@@ -231,6 +240,7 @@ def asSearch(asNum):
 		if AS["asn"] == asNum:
 			return AS
 	'''
+	
 #method to determine the color of a link/node on the visualization
 def Value2Color(newValue):
 	value = newValue
@@ -316,12 +326,12 @@ def hsv2rgb (newH, newS, newV):
 def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	# Make calls to PyCairo
 	#set up drawing area
-	scale = 3
-	WIDTH = int(max_x) * scale
-	HEIGHT = int(max_y) * scale
+	scale = 0.75
+	WIDTH = int(max_x) 
+	HEIGHT = int(max_y) 
 	surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
 	cr = cairo.Context(surface)
-	#cr.scale(WIDTH, HEIGHT)
+	cr.translate(WIDTH * (1- scale) / 2, HEIGHT * (1 - scale) / 2) 
 
 	PrintHeader(cr, min_x,min_y,max_x,max_y)
 	PrintLinks(cr, max_value, scale)
@@ -335,7 +345,7 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	#$max_x = PrintKey($max_x,$max_y, $max_value);
 	#}
 	#PrintEnder();
-	surface.write_to_png("graph2.png") 
+	surface.write_to_png("graph3.png") 
 	return
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
@@ -344,18 +354,10 @@ def PrintHeader(cr, min_x,min_y,max_x,max_y):
 def PrintLinks(cr, max_value, scale):
 	seen = set()
 	for link in links:
-		#get references to AS
-		asPair = link["asPair"]
-		as1 = asPair[0]
-		as2 = asPair[1]
-		#get information to draw line
-		size1 = as1["size"] * scale
-		size2 = as2["size"] * scale
-		#center xy coordinates on the nodes
-		x1 = as1["x"] * scale + (size1 / 2)
-		y1 = as1["y"] * scale + (size1 / 2)
-		x2 = as2["x"] * scale + (size2 / 2)
-		y2 = as2["y"] * scale + (size2 / 2) 
+		x1 = link["x1"] * scale
+		y1 = link["y1"] * scale
+		x2 = link["x2"] * scale
+		y2 = link["y2"] * scale
 		color = link["color"]
 		linkInfo = ("links", x1, y1, x2, y2, color)
 		#skip if is duplicate
@@ -365,7 +367,7 @@ def PrintLinks(cr, max_value, scale):
 			cr.move_to(x1,y1)
 			cr.line_to(x2, y2)
 			cr.set_source_rgb(color[0], color[1], color[2])
-			cr.set_line_width(3)
+			cr.set_line_width(0.5)
 			cr.stroke()			
 	return
 #helper method for printGraph to print the nodes onto the image
@@ -387,14 +389,12 @@ def PrintNodes(cr, scale):
 			#plot point
 			#cr.arc(x+size, y + size ,size, 0, 2*math.pi)
 			cr.rectangle(x, y, size, size)
-			#fill with placeholder color - set actual color later
-			#debugging - remove later
-			#print(color)
+			#fill with color 
 			cr.set_source_rgb(color[0], color[1], color[2])
 			cr.fill_preserve()
 			#outline	
 			cr.set_source_rgb(0, 0, 0)
-			cr.set_line_width(2.5)
+			cr.set_line_width(2)
 			cr.stroke()
 			#restore to saved context to wipe path
 			cr.restore()
