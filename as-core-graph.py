@@ -18,6 +18,9 @@ links = []
 #maximum size of a visualized asn
 MAX_SIZE = 18
 #method to print how to run script
+
+selected_key = "customer_cone_asnes";
+
 def print_help():
 	print (sys.argv[0],"-l links.jsonl -a asns.jsonl")
 #main method
@@ -91,68 +94,67 @@ def SetUpPosition():
 	#max value for radius calculation
 	max_value = 0
 	#find the max value among all ASNs to calculate radius 
-	for AS in asns:
-		if "customer_cone_asnes" not in AS:
-			value = AS["customer_cone_asnes"] = 0
-		else:	
-			value = AS["customer_cone_asnes"]
-		if value > max_value:
-			max_value = value
-	print("maxValue:" + str(max_value) + "\n")
+	num_asn_skipped = 0
+	asIndex = 0
+	while asIndex < len(asns):
+            AS = asns[asIndex]  
+            if "longitude" not in AS or selected_key not in AS:
+                num_asn_skipped += 1
+                temp = asns.pop();
+                if asIndex < len(asns):
+                    asns[asIndex] = temp
+                continue
+            else:
+                asIndex += 1
+                value = AS[selected_key];
+                if value > max_value:
+                    max_value = value
+
+	print ("numNodes:", len(asns),"numSkipped:",num_asn_skipped)
+	print ("maxValue:", max_value,)
 
 	if verbose:
-		print("Assigning coordinates to nodes")
-	asIndex = -1
-	while asIndex < len(asns) - 1:
-		#move loop forward
-		asIndex += 1
-		AS = asns[asIndex]  
-		value = AS["customer_cone_asnes"]
-		#if asn has no longitude data, skip it and increment count 
-		if "longitude" not in AS:
-			noLongitude += 1
-			asns.remove(AS)
-			#move loop back one to account for removal
-			asIndex -= 1
-		#else perform angle calculation to determine location		
-		else:
-			angle = -2 * 3.14 * AS["longitude"] / 360
-			radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
-			size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
-			#calculate new x using polar coordinate math
-			x = radius * math.cos(angle)
-			#adjust min and max x based on new X
-			if min_x == 0:
-				min_x = x 
-				max_x = size + x
-			elif x < min_x:
-				min_x = x
-			elif x+size > max_x:
-				max_x = x+size
-			#calculate new Y using polar coordinate math
-			y = radius * math.sin(angle)
-			#adjust min and max y based on new Y
-			if min_y == 0:
-				min_y = y
-				max_x = size + x
-			elif y < min_y:
-				min_y = y
-			elif y+size > max_y: 
-				max_y = y+size
-			#add new values to AS object 
-			AS["x"] = x
-			AS["y"] = y
-			AS["size"] = size
-			AS["color"] = Value2Color(value/max_value)
-			#add AS object to dictionary
-			asnDict[AS["asn"]] = AS
+            print("Assigning coordinates to nodes")
+	for AS in asns:
+            value = AS["customer_cone_asnes"]
+            angle = -2 * 3.14 * AS["longitude"] / 360
+            radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
+            size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
+            #calculate new x using polar coordinate math
+            x = radius * math.cos(angle)
+            #adjust min and max x based on new X
+            if min_x == 0:
+                min_x = x 
+                max_x = size + x
+            elif x < min_x:
+                min_x = x
+            elif x+size > max_x:
+                max_x = x+size
+            #calculate new Y using polar coordinate math
+            y = radius * math.sin(angle)
+            #adjust min and max y based on new Y
+            if min_y == 0:
+                min_y = y
+                max_x = size + x
+            elif y < min_y:
+                min_y = y
+            elif y+size > max_y: 
+                max_y = y+size
+            #add new values to AS object 
+            AS["x"] = x
+            AS["y"] = y
+            AS["size"] = size
+            AS["color"] = Value2Color(value/max_value)
+            #add AS object to dictionary
+            asnDict[AS["asn"]] = AS
+
 
 	#increase min max x y slightly, move all ASNes to adjust 
 	min_x += min_x*.05
 	min_y += min_y*.05
 	for AS in asns:
-		AS["x"] -= min_x
-		AS["y"] -= min_y
+            AS["x"] -= min_x
+            AS["y"] -= min_y
 	max_x -= min_x
 	max_y -= min_y
 	min_x = min_y = 0
@@ -176,70 +178,58 @@ def SetUpPosition():
 	}
 	'''
 	if verbose:
-		print("Assigning coordinates to links")
-	linkIndex = -1
-	while linkIndex < len(links) - 1:
-		#move loop forward
-		linkIndex += 1
-		link = links[linkIndex]
-		#create pair of AS objects using asn number data in link
-		as1 = asSearch(link["asn0"])
-		as2 = asSearch(link["asn1"])
-		#if either AS is invalid, skip to next iteration
-		if as1 is None or as2 is None:
-			invalidLinks += 1
-			links.remove(link)
-			#move loop back one to account for removal
-			linkIndex -= 1
-			continue
-		asPair = (as1, as2)
-		#find greatest value in the pair and assign to link
-		for AS in asPair:
-			value = AS["customer_cone_asnes"]
-			if "customer_cone_asnes" not in link:
-				link["customer_cone_asnes"] = value
-			elif value > link["customer_cone_asnes"]:
-				link["customer_cone_asnes"] = value
-		
-		#get coordinates
-		#get information to draw line
-		size1 = as1["size"]
-		size2 = as2["size"]
-		#center xy coordinates on the nodes
-		link["x1"] = as1["x"]+ (size1 / 2)
-		link["y1"] = as1["y"]+ (size1 / 2)
-		link["x2"] = as2["x"]+ (size2 / 2)
-		link["y2"] = as2["y"]+ (size2 / 2) 
-		#calculate distance for sorting
-		link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
-		#calculate color
-		value = link["customer_cone_asnes"]
-		link["color"] = Value2Color(value/max_value)
+            print("Assigning coordinates to links (num links:",len(links),")")
+	linkIndex = 0
+	num_links_skipped = 0;
+	while linkIndex < len(links):
+            link = links[linkIndex]
+            as1 = asSearch(link["asn0"])
+            as2 = asSearch(link["asn1"])
+            #create pair of AS objects using asn number data in link
+            if as1 is None or as2 is None:
+                num_links_skipped += 1
+                temp = links.pop()
+                if linkIndex < len(links):
+                    links[linkIndex] = temp
+                continue 
+                
+            for AS in [as1, as2]: 
+                value = AS[selected_key]
+                if selected_key not in link:
+                    link[selected_key] = value
+                elif value > link[selected_key]:
+                    link[selected_key] = value
+
+            linkIndex += 1
+            #find greatest value in the pair and assign to link
+            #get coordinates
+            #get information to draw line
+            size1 = as1["size"]
+            size2 = as2["size"]
+            #center xy coordinates on the nodes
+            link["x1"] = as1["x"]+ (size1 / 2)
+            link["y1"] = as1["y"]+ (size1 / 2)
+            link["x2"] = as2["x"]+ (size2 / 2)
+            link["y2"] = as2["y"]+ (size2 / 2) 
+            #calculate distance for sorting
+            link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
+            #calculate color
+            value = link["customer_cone_asnes"]
+            link["color"] = Value2Color(value/max_value)
 
 	#sort links array by distance in descending order
 	newLinks = sorted(links, key = lambda link: link["distance"],reverse=True)
 	links = newLinks
 
-	print ("ASNs with invalid data:" + str(noLongitude))
-	print ("Links with invalid ASNs:" + str(invalidLinks))
+	print ("Links with skipped ASNs:" + str(num_links_skipped))
 	return min_x, min_y, max_x, max_y, max_value
+
 #helper method to search for AS using number from link
 def asSearch(asNum):
-	if asNum not in asnDict:
-		return None
-	else:
-		return asnDict[asNum]
-	'''
-	filterList = list(filter(lambda AS: AS["asn"] == asNum, asns))
-	if len(filterList) == 0:
-		return None
-	else:
-		return filterList[0]
-	
-	for AS in asns:
-		if AS["asn"] == asNum:
-			return AS
-	'''
+    if asNum not in asnDict:
+        return None
+    else:
+        return asnDict[asNum]
 	
 #method to determine the color of a link/node on the visualization
 def Value2Color(newValue):
