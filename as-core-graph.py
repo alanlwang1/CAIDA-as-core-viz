@@ -202,16 +202,11 @@ def SetUpPosition():
         link["x2"] = as2["x"]+ (size2 / 2)
         link["y2"] = as2["y"]+ (size2 / 2) 
         #calculate distance for sorting
-        link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
+        #link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
         #calculate color
         value = link[selected_key]
         link["color"] = Value2Color(value/max_value)
         linkIndex += 1
-
-    #sort links array by distance in descending order
-    new_links = sorted(links, key = lambda link: link["distance"],reverse=True)
-    links = new_links
-
 
     print ("numNodes:", len(asns),"numSkipped:",num_asn_skipped)
     print ("numLinks:", len(links),"numSkipped:",num_links_skipped) 
@@ -299,12 +294,19 @@ def hsv2rgb (new_h, new_s, new_v):
         b = v * (255 - s * f)
     return [r, g, b]
 #method to print the visualization onto an image
-def PrintGraph(min_x, min_y, max_x, max_y, max_value):
+def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):  
+    global asns
+    global links
+    #sort nodes and links lists
+    asns = sorted(asns, key = lambda AS: AS[selected_key])
+    links = sorted(links, key = lambda link: link[selected_key])    
     # Make calls to PyCairo
     #set up drawing area
-    scale = 1
-    WIDTH = int(max_x * 1.6) 
-    HEIGHT = int(max_y * 1.5) 
+    scale = 0.6
+    max_x = new_max_x * scale
+    max_y = new_max_y * scale
+    WIDTH = int(new_max_x) 
+    HEIGHT = int(new_max_y * 0.8) 
     
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
     cr = cairo.Context(surface)
@@ -313,8 +315,8 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	
 	
     PrintHeader(cr, min_x,min_y,max_x,max_y)
-    PrintKey(cr, max_x, max_y, max_value, scale)
-    cr.translate(WIDTH * (1 - scale) / 2, HEIGHT * (1 / 3) / 2) 
+    PrintKey(cr, new_max_x, new_max_y, max_value, scale)
+    cr.translate((WIDTH - max_x) / 2, (HEIGHT - max_y) / 2) 
     PrintLinks(cr, max_value, scale)
     PrintNodes(cr, scale)
 	
@@ -375,18 +377,18 @@ def PrintNodes(cr, scale):
             cr.fill_preserve()
             #outline	
             cr.set_source_rgb(0, 0, 0)
-            cr.set_line_width(2)
+            cr.set_line_width(1)
             cr.stroke()
             #restore to saved context to wipe path
             cr.restore()
     return
 #helper method for printGraph to print the color key onto the image
 def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
-    max_x = new_max_x * 1.5
-    max_y = new_max_y * 1.5
+    max_x = new_max_x * 0.95
+    max_y = new_max_y * 0.8
     max_value = new_max_value
 
-    key_width = max_x / 40 
+    key_width = max_x / 45 
     key_x_margin = key_width * 0.1
     key_x = max_x - key_width - key_x_margin 
     #max_x = max_x + key_x_margin + key_width
@@ -416,7 +418,7 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     
     cr.select_font_face("Arial", cairo.FONT_SLANT_NORMAL, 
     cairo.FONT_WEIGHT_NORMAL)
-    cr.set_font_size(50)
+    cr.set_font_size(25)
     cr.set_source_rgb(0, 0, 0)
     for value in range(11):
         fraction = value / 10
@@ -424,7 +426,8 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
         x1 = key_x 
         y1 = (key_y + key_height * (1 - fraction))
 
-        x2 = (key_x + key_width + 2 * key_x_margin) 
+        x2 = key_x + key_width        
+        #x2 = (key_x + key_width + 2 * key_x_margin) 
         y2 = y1
 
 		
@@ -433,9 +436,7 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
         cr.set_source_rgb(0, 0, 0)
         cr.set_line_width(2)
         cr.stroke()
-        
-        cr.move_to(x2, y2)
-        cr.line_to(x2 + 50, y2)
+        cr.move_to(x2 + 10, y2)
         cr.show_text(number)
 #run the main method
 main(sys.argv[1:])
