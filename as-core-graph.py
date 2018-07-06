@@ -9,6 +9,8 @@ import cairo
 verbose = False
 #boolean controlling grayscale of image printed
 grayscale = False
+#boolean controlling whether to print color key on image
+print_key = False
 #array holding object data of asns from file
 asns = []
 #dictionary holding asns as keys to AS values
@@ -29,15 +31,23 @@ def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
+    parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
     args = parser.parse_args()
 
     if args.links is None or args.asns is None:
         print_help()
         sys.exit()
-
+    
+    if args.print_key:
+        print("key print on")
+        print_key = True
+   
     if args.verbose:
         verbose = True
+    
+
+        
 
     ParseAsns(args.asns)
     ParseLinks(args.links)
@@ -95,7 +105,7 @@ def SetUpPosition():
     asIndex = 0
     while asIndex < len(asns): 
         AS = asns[asIndex]
-        if "longitude" not in AS or selected_key not in AS:
+        if "longitude" not in AS or selected_key not in AS or AS[selected_key] <= 0:
             num_asn_skipped += 1
             #pop last AS from end of list
             temp = asns.pop();
@@ -189,7 +199,7 @@ def SetUpPosition():
             value = AS[selected_key]
             if selected_key not in link:
                 link[selected_key] = value
-            elif value > link[selected_key]:
+            elif value < link[selected_key]:
                 link[selected_key] = value
 		
         #get coordinates
@@ -315,7 +325,8 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	
 	
     PrintHeader(cr, min_x,min_y,max_x,max_y)
-    PrintKey(cr, new_max_x, new_max_y, max_value, scale)
+    if print_key:
+        PrintKey(cr, new_max_x, new_max_y, max_value, scale)
     cr.translate((WIDTH - max_x) / 2, (HEIGHT - max_y) / 2) 
     PrintLinks(cr, max_value, scale)
     PrintNodes(cr, scale)
