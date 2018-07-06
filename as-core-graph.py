@@ -4,6 +4,9 @@ import sys
 import math
 import json
 import cairo
+import urllib.request
+import urllib.parse
+import urllib.error
 
 #boolean controlling whether to print messages about run status
 verbose = False
@@ -29,16 +32,21 @@ def print_help():
 def main(argv):
     global verbose
     parser = argparse.ArgumentParser()
-    parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
-    parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
+    #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
+    #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
+    parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
     args = parser.parse_args()
-
+    
+    if args.url is None:
+        print_help()
+        sys.exit()
+    '''    
     if args.links is None or args.asns is None:
         print_help()
         sys.exit()
-    
+    '''
     if args.print_key:
         print("key print on")
         print_key = True
@@ -46,15 +54,64 @@ def main(argv):
     if args.verbose:
         verbose = True
     
-
+    
         
 
-    ParseAsns(args.asns)
-    ParseLinks(args.links)
+    ParseAsns(args.url)
+    ParseLinks(args.url)
 
     min_x, min_y, max_x, max_y, max_value = SetUpPosition()
     PrintGraph(min_x, min_y, max_x, max_y, max_value)
 ###########################
+#method to populate links array with object data from url
+def ParseLinks(url):
+    global verbose
+    global asns
+    global links
+    url = "http://" + url + "/links"
+    if verbose:
+        print ("loading",url)
+    links_json = url_load(url)
+    link_total = links_json["total"]
+    links = links_json["data"]
+    #add code to go through all pages later
+#method to populate asn array with object data from url
+def ParseAsns(url):
+    global verbose
+    global asns
+    url = "http://" + url + "/asns?populate"
+    if verbose:
+        print ("loading",url)
+    
+    asn_json = url_load(url)
+    asn_total = asn_json["total"]
+    asns = asn_json["data"]   
+    #add code to go through all pages later
+#method to pull data from online url
+def download(url):
+    try:
+        print ("downloading",url)
+        response = urllib.request.urlopen(url, timeout=5)
+        return response.readline()
+    except urllib.error.HTTPError as e:
+        traceback.print_stack()
+        print ('HTTPError = ' + str(e.code))
+        sys.exit()
+    except Exception:
+        traceback.print_stack()
+        print ('generic exception: ' + traceback.format_exc())
+        sys.exit()
+#method to pull data from API
+def url_load(url):
+    url_data = download(url)
+    res_json = url_data.decode('utf-8')
+    decoder = json.JSONDecoder()
+    res = decoder.decode(res_json)
+    if "total" not in res_json and "data" not in res_json:
+        sys.stderr.write("failed to download"+url)
+        sys.exit()
+    return res
+'''
 #method to populate links array with object data from links file
 def ParseLinks(fname):
     global verbose
@@ -69,7 +126,7 @@ def ParseAsns(fname):
     global asns
     if verbose:
         print ("loading",fname)
-    asns = jsonl_load(fname)
+    asns = jsonl_load(fname)    
 #helper method for jsonl_load method to create handler for file
 def open_safe(filename,op):
     try:
@@ -88,6 +145,7 @@ def jsonl_load(filename):
         if len(line) > 0 and line[0][0] != "#":
             objects.append(decoder.decode(line))
     return objects
+'''
 ###########################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition():
@@ -105,7 +163,7 @@ def SetUpPosition():
     asIndex = 0
     while asIndex < len(asns): 
         AS = asns[asIndex]
-        if "longitude" not in AS or selected_key not in AS or AS[selected_key] <= 0:
+        if "longitude" not in AS or "cone" not in AS or "asns" not in AS["cone"] or AS["cone"]["asns"] <= 0:
             num_asn_skipped += 1
             #pop last AS from end of list
             temp = asns.pop();
@@ -116,7 +174,7 @@ def SetUpPosition():
                 continue
         else:	
             #check for max value
-            value = AS[selected_key]
+            value = AS["cone"]["asns"]
             if value > max_value:
                 max_value = value
             #move loop forward
@@ -127,8 +185,7 @@ def SetUpPosition():
         print("Assigning coordinates to nodes (num nodes:",len(asns),")")
     #loop through current asn list, calculating and adding coordinates to each asn  
     for AS in asns:
-        value = AS[selected_key]	
-        angle = -2 * 3.14 * AS["longitude"] / 360
+        angle = -2 * 3.14 * float(AS["longitude"]) / 360
         radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
         size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
         #calculate new x using polar coordinate math
@@ -157,7 +214,7 @@ def SetUpPosition():
         AS["size"] = size
         AS["color"] = Value2Color(value/max_value)
         #add AS object to dictionary
-        asn_dict[AS["asn"]] = AS
+        asn_dict[int(AS["id"])] = AS
 
     #increase min max x y slightly, move all ASNes to adjust 
     min_x += min_x*.05
@@ -196,11 +253,11 @@ def SetUpPosition():
         as_pair = (as1, as2)
         #find greatest value in the pair and assign to link
         for AS in as_pair:
-            value = AS[selected_key]
+            value = AS["cone"]["asns"]
             if selected_key not in link:
-                link[selected_key] = value
-            elif value < link[selected_key]:
-                link[selected_key] = value
+                link["cone_asns"] = value
+            elif value < link["cone"]["asns"]:
+                link["cone_asns"] = value
 		
         #get coordinates
         #get information to draw line
@@ -214,7 +271,7 @@ def SetUpPosition():
         #calculate distance for sorting
         #link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
         #calculate color
-        value = link[selected_key]
+        value = link["cone_asns"]
         link["color"] = Value2Color(value/max_value)
         linkIndex += 1
 
@@ -308,8 +365,8 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     global asns
     global links
     #sort nodes and links lists
-    asns = sorted(asns, key = lambda AS: AS[selected_key])
-    links = sorted(links, key = lambda link: link[selected_key])    
+    asns = sorted(asns, key = lambda AS: AS["cone"]["asns"])
+    links = sorted(links, key = lambda link: link["cone_asns"])    
     # Make calls to PyCairo
     #set up drawing area
     scale = 0.6
