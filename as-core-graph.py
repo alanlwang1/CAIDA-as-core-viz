@@ -31,6 +31,7 @@ def print_help():
 #main method
 def main(argv):
     global verbose
+    global print_key
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
@@ -68,29 +69,46 @@ def ParseLinks(url):
     global verbose
     global asns
     global links
-    url = "http://" + url + "/links"
+    new_url = "http://" + url + "/links"
     if verbose:
-        print ("loading",url)
-    links_json = url_load(url)
+        print ("loading",new_url)
+
+    links_json = url_load(new_url)
     link_total = links_json["total"]
-    links = links_json["data"]
+    page_count = 1;
+    link_data = links_json["data"]
+    #loop through until data array is empty
+    while(len(link_data) > 0):
+        links.extend(link_data)
+        page_count += 1
+        new_url = "http://" + url + "/links?page=" + str(page_count)
+        links_json = url_load(new_url)
+        link_data = links_json["data"]
     #add code to go through all pages later
 #method to populate asn array with object data from url
 def ParseAsns(url):
     global verbose
     global asns
-    url = "http://" + url + "/asns?populate"
+    new_url = "http://" + url + "/asns?populate"
     if verbose:
-        print ("loading",url)
+        print ("loading",new_url)
     
-    asn_json = url_load(url)
+    asn_json = url_load(new_url)
     asn_total = asn_json["total"]
-    asns = asn_json["data"]   
+    page_count = 1;
+    asn_data = asn_json["data"] 
+    #loop through until data array is empty  
+    while(len(asn_data) > 0):
+        asns.extend(asn_data)
+        page_count += 1
+        new_url = "http://" + url + "/asns?populate&page=" + str(page_count)
+        asn_json = url_load(new_url)
+        asn_data = asn_json["data"]
     #add code to go through all pages later
 #method to pull data from online url
 def download(url):
     try:
-        print ("downloading",url)
+        #print ("downloading",url)
         response = urllib.request.urlopen(url, timeout=5)
         return response.readline()
     except urllib.error.HTTPError as e:
@@ -161,6 +179,8 @@ def SetUpPosition():
     num_asn_skipped = 0
     #index for traversing through asn list
     asIndex = 0
+    if verbose:
+        print("numNodes:",len(asns))
     while asIndex < len(asns): 
         AS = asns[asIndex]
         if "longitude" not in AS or "cone" not in AS or "asns" not in AS["cone"] or AS["cone"]["asns"] <= 0:
@@ -185,6 +205,7 @@ def SetUpPosition():
         print("Assigning coordinates to nodes (num nodes:",len(asns),")")
     #loop through current asn list, calculating and adding coordinates to each asn  
     for AS in asns:
+        value = AS["cone"]["asns"]
         angle = -2 * 3.14 * float(AS["longitude"]) / 360
         radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
         size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
@@ -254,9 +275,9 @@ def SetUpPosition():
         #find greatest value in the pair and assign to link
         for AS in as_pair:
             value = AS["cone"]["asns"]
-            if selected_key not in link:
+            if "cone_asns" not in link:
                 link["cone_asns"] = value
-            elif value < link["cone"]["asns"]:
+            elif value < link["cone_asns"]:
                 link["cone_asns"] = value
 		
         #get coordinates
@@ -383,6 +404,7 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:
+        print("printing key")
         PrintKey(cr, new_max_x, new_max_y, max_value, scale)
     cr.translate((WIDTH - max_x) / 2, (HEIGHT - max_y) / 2) 
     PrintLinks(cr, max_value, scale)
