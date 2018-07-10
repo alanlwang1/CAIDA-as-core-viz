@@ -25,7 +25,7 @@ MAX_SIZE = 18
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
-key_function = None
+key_function = CustomerConeAsnes
 
 #method to print how to run script
 def print_help():
@@ -55,13 +55,8 @@ def main(argv):
         print_key = True
    
     if args.verbose:
-        verbose = True
-    
-    if selected_key is "customer_cone_asnes": 
-        print("changing key")
-        key_function = CustomerConeAsnes
+        verbose = True    
         
-
     ParseAsns(args.url)
     ParseLinks(args.url)
 
@@ -88,7 +83,6 @@ def ParseLinks(url):
         new_url = "http://" + url + "/links?page=" + str(page_count)
         links_json = url_load(new_url)
         link_data = links_json["data"]
-    #add code to go through all pages later
 #method to populate asn array with object data from url
 def ParseAsns(url):
     global verbose
@@ -108,7 +102,6 @@ def ParseAsns(url):
         new_url = "http://" + url + "/asns?populate&page=" + str(page_count)
         asn_json = url_load(new_url)
         asn_data = asn_json["data"]
-    #add code to go through all pages later
 #method to pull data from online url
 def download(url):
     try:
@@ -413,7 +406,6 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:
-        print("printing key")
         PrintKey(cr, new_max_x, new_max_y, max_value, scale)
     cr.translate((WIDTH - max_x) / 2, (HEIGHT - max_y) / 2) 
     PrintLinks(cr, max_value, scale)
@@ -490,7 +482,6 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     key_width = max_x / 45 
     key_x_margin = key_width * 0.1
     key_x = max_x - key_width - key_x_margin 
-    #max_x = max_x + key_x_margin + key_width
 
     key_height = 6 * max_y / 10 
     key_y = (max_y - key_height) / 2
@@ -509,11 +500,12 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
         cr.rectangle(x, y, width, height)
         cr.set_source_rgb(color[0], color[1], color[2])
         cr.fill()
+
     #border
-    cr.rectangle(key_x, key_y, key_width, key_height)
-    cr.set_line_width(5)
-    cr.set_source_rgb(0,0,0)
-    cr.stroke()
+    #cr.rectangle(key_x, key_y, key_width, key_height)
+    #cr.set_line_width(5)
+    #cr.set_source_rgb(0,0,0)
+    #cr.stroke()
     
     cr.select_font_face("Arial", cairo.FONT_SLANT_NORMAL, 
     cairo.FONT_WEIGHT_NORMAL)
@@ -526,7 +518,6 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
         y1 = (key_y + key_height * (1 - fraction))
 
         x2 = key_x + key_width        
-        #x2 = (key_x + key_width + 2 * key_x_margin) 
         y2 = y1
 
 		
