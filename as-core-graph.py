@@ -24,6 +24,8 @@ links = []
 MAX_SIZE = 18
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
+#function to retrieve the metric value from AS
+key_function = None
 
 #method to print how to run script
 def print_help():
@@ -32,6 +34,7 @@ def print_help():
 def main(argv):
     global verbose
     global print_key
+    global key_function
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
@@ -49,13 +52,14 @@ def main(argv):
         sys.exit()
     '''
     if args.print_key:
-        print("key print on")
         print_key = True
    
     if args.verbose:
         verbose = True
     
-    
+    if selected_key is "customer_cone_asnes": 
+        print("changing key")
+        key_function = CustomerConeAsnes
         
 
     ParseAsns(args.url)
@@ -183,7 +187,8 @@ def SetUpPosition():
         print("numNodes:",len(asns))
     while asIndex < len(asns): 
         AS = asns[asIndex]
-        if "longitude" not in AS or "cone" not in AS or "asns" not in AS["cone"] or AS["cone"]["asns"] <= 0:
+        value = key_function(AS)
+        if "longitude" not in AS or value is None or value <= 0:
             num_asn_skipped += 1
             #pop last AS from end of list
             temp = asns.pop();
@@ -194,7 +199,6 @@ def SetUpPosition():
                 continue
         else:	
             #check for max value
-            value = AS["cone"]["asns"]
             if value > max_value:
                 max_value = value
             #move loop forward
@@ -205,7 +209,7 @@ def SetUpPosition():
         print("Assigning coordinates to nodes (num nodes:",len(asns),")")
     #loop through current asn list, calculating and adding coordinates to each asn  
     for AS in asns:
-        value = AS["cone"]["asns"]
+        value = key_function(AS)
         angle = -2 * 3.14 * float(AS["longitude"]) / 360
         radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
         size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
@@ -274,11 +278,11 @@ def SetUpPosition():
         as_pair = (as1, as2)
         #find greatest value in the pair and assign to link
         for AS in as_pair:
-            value = AS["cone"]["asns"]
-            if "cone_asns" not in link:
-                link["cone_asns"] = value
-            elif value < link["cone_asns"]:
-                link["cone_asns"] = value
+            value = key_function(AS)
+            if selected_key not in link:
+                link[selected_key] = value
+            elif value < link[selected_key]:
+                link[selected_key] = value
 		
         #get coordinates
         #get information to draw line
@@ -292,21 +296,26 @@ def SetUpPosition():
         #calculate distance for sorting
         #link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
         #calculate color
-        value = link["cone_asns"]
+        value = link[selected_key]
         link["color"] = Value2Color(value/max_value)
         linkIndex += 1
 
     print ("numNodes:", len(asns),"numSkipped:",num_asn_skipped)
     print ("numLinks:", len(links),"numSkipped:",num_links_skipped) 
     return min_x, min_y, max_x, max_y, max_value
+
+#helper function to get the customer cone asns of an AS
+def CustomerConeAsnes(AS):
+    if "cone" not in AS or "asns" not in AS["cone"]:
+        return None
+    else:
+        return AS["cone"]["asns"]
 #helper method to search for AS using number from link
 def asSearch(asNum):
     if asNum not in asn_dict:
         return None
     else:
 	    return asn_dict[asNum]
-
-	
 #method to determine the color of a link/node on the visualization
 def Value2Color(new_value):
     value = new_value
@@ -386,8 +395,8 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     global asns
     global links
     #sort nodes and links lists
-    asns = sorted(asns, key = lambda AS: AS["cone"]["asns"])
-    links = sorted(links, key = lambda link: link["cone_asns"])    
+    asns = sorted(asns, key = key_function)
+    links = sorted(links, key = lambda link: link[selected_key])    
     # Make calls to PyCairo
     #set up drawing area
     scale = 0.6
