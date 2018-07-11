@@ -14,6 +14,8 @@ verbose = False
 grayscale = False
 #boolean controlling whether to print color key on image
 print_key = False
+#number of the asn to focus on with fisheye effect
+focus_asn = -1 
 #array holding object data of asns from file
 asns = []
 #dictionary holding asns as keys to AS values
@@ -29,7 +31,7 @@ key_function = CustomerConeAsnes
 
 #method to print how to run script
 def print_help():
-    print (sys.argv[0],"-l links.jsonl -a asns.jsonl")
+    print (sys.argv[0],"-u as-rank.caida.org/api/v1")
 #main method
 def main(argv):
     global verbose
@@ -39,6 +41,7 @@ def main(argv):
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
     parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
+    parser.add_argument("-f", type=int, dest="focus", help="number of AS to focus on using fisheye effect")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
     args = parser.parse_args()
@@ -46,11 +49,13 @@ def main(argv):
     if args.url is None:
         print_help()
         sys.exit()
-    '''    
-    if args.links is None or args.asns is None:
-        print_help()
+
+    if args.focus is None:
+        print_Help()
         sys.exit()
-    '''
+    else:
+        focus_asn = args.focus
+
     if args.print_key:
         print_key = True
    
@@ -191,7 +196,9 @@ def SetUpPosition():
                 asns[asIndex] = temp
                 continue
         else:	
-            #check for max value
+            #add AS object to dictionary
+            asn_dict[int(AS["id"])] = AS
+            #check for max value            
             if value > max_value:
                 max_value = value
             #move loop forward
@@ -206,8 +213,19 @@ def SetUpPosition():
         angle = -2 * 3.14 * float(AS["longitude"]) / 360
         radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
         size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
-        #calculate new x using polar coordinate math
+        #calculate new x and y using polar coordinate math
         x = radius * math.cos(angle)
+        y = radius * math.sin(angle)
+        #adjust x and y if using fisheye effect
+        if focus_asn > -1
+            new_coords = FishEye(x, y)
+            x = new_coords[0]
+            y = new_coords[1] 
+        #add new values to AS object 
+        AS["x"] = x
+        AS["y"] = y
+        AS["size"] = size
+        AS["color"] = Value2Color(value/max_value)
         #adjust min and max x based on new X
         if min_x == 0:  
             min_x = x 
@@ -216,8 +234,6 @@ def SetUpPosition():
             min_x = x
         elif x+size > max_x:
             max_x = x+size
-        #calculate new Y using polar coordinate math
-        y = radius * math.sin(angle)
         #adjust min and max y based on new Y
         if min_y == 0:
             min_y = y
@@ -226,13 +242,6 @@ def SetUpPosition():
             min_y = y
         elif y+size > max_y: 
             max_y = y+size
-        #add new values to AS object 
-        AS["x"] = x
-        AS["y"] = y
-        AS["size"] = size
-        AS["color"] = Value2Color(value/max_value)
-        #add AS object to dictionary
-        asn_dict[int(AS["id"])] = AS
 
     #increase min max x y slightly, move all ASNes to adjust 
     min_x += min_x*.05
@@ -383,6 +392,9 @@ def hsv2rgb (new_h, new_s, new_v):
         g = v * 255 * (1 - s)
         b = v * (255 - s * f)
     return [r, g, b]
+#helper function to apply fisheye effect to a pair of xy coordinates 
+def FishEye(x, y):
+    
 #method to print the visualization onto an image
 def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):  
     global asns
