@@ -27,7 +27,7 @@ MAX_SIZE = 18
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
-key_function = CustomerConeAsnes
+key_function = None
 
 #method to print how to run script
 def print_help():
@@ -37,6 +37,7 @@ def main(argv):
     global verbose
     global print_key
     global key_function
+    global focus_asn
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
@@ -60,8 +61,11 @@ def main(argv):
         print_key = True
    
     if args.verbose:
-        verbose = True    
-        
+        verbose = True
+    
+    if selected_key is "customer_cone_asnes":
+        key_function = CustomerConeAsnes    
+
     ParseAsns(args.url)
     ParseLinks(args.url)
 
@@ -187,6 +191,9 @@ def SetUpPosition():
         AS = asns[asIndex]
         value = key_function(AS)
         if "longitude" not in AS or value is None or value <= 0:
+            if focus_asn == int(AS["id"]):
+                sys.stderr.write("invalid focus asn")
+                sys.exit()                               
             num_asn_skipped += 1
             #pop last AS from end of list
             temp = asns.pop();
@@ -208,24 +215,35 @@ def SetUpPosition():
     if verbose:
         print("Assigning coordinates to nodes (num nodes:",len(asns),")")
     #loop through current asn list, calculating and adding coordinates to each asn  
+    focus_x = 0
+    focus_y = 0
     for AS in asns:
         value = key_function(AS)
         angle = -2 * 3.14 * float(AS["longitude"]) / 360
+        AS["angle"] = angle
         radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
         size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
         #calculate new x and y using polar coordinate math
         x = radius * math.cos(angle)
         y = radius * math.sin(angle)
-        #adjust x and y if using fisheye effect
-        if focus_asn > -1
-            new_coords = FishEye(x, y)
-            x = new_coords[0]
-            y = new_coords[1] 
         #add new values to AS object 
         AS["x"] = x
         AS["y"] = y
         AS["size"] = size
         AS["color"] = Value2Color(value/max_value)
+        #store x and y values outside loop if AS is focus asn
+        if focus_asn == int(AS["id"]):
+            focus_x = AS["x"]
+            focus_y = AS["y"]
+    for AS in asns:
+        #remap asns if using fisheye effect
+        if focus_asn > -1:
+            x = AS["x"]
+            y = AS["y"]
+            angle = AS["angle"]
+            new_coords = FishEye(x, y, AS["angle"], focus_x, focus_y)
+            AS["x"]  = x = new_coords[0]
+            AS["y"]  = y = new_coords[1]
         #adjust min and max x based on new X
         if min_x == 0:  
             min_x = x 
@@ -393,7 +411,19 @@ def hsv2rgb (new_h, new_s, new_v):
         b = v * (255 - s * f)
     return [r, g, b]
 #helper function to apply fisheye effect to a pair of xy coordinates 
-def FishEye(x, y):
+def FishEye(x, y, angle, focus_x, focus_y):
+    #focal length of the "lens"    
+    r = math.sqrt(math.pow(x - focus_x, 2) + math.pow(y-focus_y, 2))
+    f = 500
+    #angle from optical axis
+    theta = math.atan(r/f)
+    new_r = math.tan(theta/2) * 2 * f
+    #new_r = theta * f    
+    #new_r = 2 * f * math.sin(theta/2)
+    #new_r = f * math.sin(theta)    
+    new_x = focus_x + new_r * math.cos(angle)
+    new_y = focus_y + new_r * math.sin(angle)  
+    return (new_x, new_y)
     
 #method to print the visualization onto an image
 def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):  
@@ -432,7 +462,7 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	#$max_x = PrintKey($max_x,$max_y, $max_value);
 	#}
 	#PrintEnder();
-    surface.write_to_png("graph4.png") 
+    surface.write_to_png("graph6.png") 
     return
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
@@ -492,7 +522,7 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     max_value = new_max_value
 
     key_width = max_x / 45 
-    key_x_margin = key_width * 0.1
+    key_x_margin = key_width * 0.2
     key_x = max_x - key_width - key_x_margin 
 
     key_height = 6 * max_y / 10 
@@ -521,7 +551,7 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     
     cr.select_font_face("Arial", cairo.FONT_SLANT_NORMAL, 
     cairo.FONT_WEIGHT_NORMAL)
-    cr.set_font_size(25)
+    cr.set_font_size(key_width / 2)
     cr.set_source_rgb(0, 0, 0)
     for value in range(11):
         fraction = value / 10
