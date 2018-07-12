@@ -42,7 +42,7 @@ def main(argv):
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
     parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
-    parser.add_argument("-f", type=int, dest="focus", help="number of AS to focus on using fisheye effect")
+    parser.add_argument("-f", type=int, nargs='?', const=-1, dest="focus", help="number of AS to focus on using fisheye effect")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
     args = parser.parse_args()
@@ -51,11 +51,12 @@ def main(argv):
         print_help()
         sys.exit()
 
-    if args.focus is None:
-        print_Help()
-        sys.exit()
-    else:
-        focus_asn = args.focus
+    if args.focus is not None:    
+        if args.focus > -1:
+            focus_asn = args.focus
+        else: 
+            print_help()
+            sys.exit()
 
     if args.print_key:
         print_key = True
@@ -220,7 +221,6 @@ def SetUpPosition():
     for AS in asns:
         value = key_function(AS)
         angle = -2 * 3.14 * float(AS["longitude"]) / 360
-        AS["angle"] = angle
         radius = (math.log(max_value+1) - math.log(value+1) +.5)*100
         size = int((MAX_SIZE-3)* (math.log(value+1)/math.log(max_value+1)) )+3;
         #calculate new x and y using polar coordinate math
@@ -236,12 +236,11 @@ def SetUpPosition():
             focus_x = AS["x"]
             focus_y = AS["y"]
     for AS in asns:
+        x = AS["x"]
+        y = AS["y"]
         #remap asns if using fisheye effect
         if focus_asn > -1:
-            x = AS["x"]
-            y = AS["y"]
-            angle = AS["angle"]
-            new_coords = FishEye(x, y, AS["angle"], focus_x, focus_y)
+            new_coords = FishEye(x, y, focus_x, focus_y)
             AS["x"]  = x = new_coords[0]
             AS["y"]  = y = new_coords[1]
         #adjust min and max x based on new X
@@ -260,13 +259,13 @@ def SetUpPosition():
             min_y = y
         elif y+size > max_y: 
             max_y = y+size
-
+    
     #increase min max x y slightly, move all ASNes to adjust 
     min_x += min_x*.05
     min_y += min_y*.05
     for AS in asns:
         AS["x"] -= min_x
-        AS["y"] -= min_y
+        AS["y"] -= min_y  
     max_x -= min_x
     max_y -= min_y
     min_x = min_y = 0
@@ -411,18 +410,21 @@ def hsv2rgb (new_h, new_s, new_v):
         b = v * (255 - s * f)
     return [r, g, b]
 #helper function to apply fisheye effect to a pair of xy coordinates 
-def FishEye(x, y, angle, focus_x, focus_y):
-    #focal length of the "lens"    
-    r = math.sqrt(math.pow(x - focus_x, 2) + math.pow(y-focus_y, 2))
-    f = 500
+def FishEye(x, y, focus_x, focus_y):
+    #calculate distance and angle from focus point 
+    angle = math.atan2(y - focus_y, x - focus_x) 
+    r = math.sqrt(math.pow(x-focus_x, 2) + math.pow(y - focus_y, 2))
+    #focal length of the "lens"  
+    f = 750
     #angle from optical axis
-    theta = math.atan(r/f)
+    theta = math.atan2(r,f)
+    #calculate new distance from focus point
     new_r = math.tan(theta/2) * 2 * f
     #new_r = theta * f    
     #new_r = 2 * f * math.sin(theta/2)
     #new_r = f * math.sin(theta)    
-    new_x = focus_x + new_r * math.cos(angle)
-    new_y = focus_y + new_r * math.sin(angle)  
+    new_x = focus_x + (new_r * math.cos(angle))
+    new_y = focus_y + (new_r * math.sin(angle)) 
     return (new_x, new_y)
     
 #method to print the visualization onto an image
@@ -506,7 +508,10 @@ def PrintNodes(cr, scale):
             #plot point
             cr.rectangle(x, y, size, size)
             #fill with color 
-            cr.set_source_rgb(color[0], color[1], color[2])
+            if focus_asn == int(AS["id"]):
+                cr.set_source_rgb(1, 1, 1)
+            else:
+                cr.set_source_rgb(color[0], color[1], color[2])
             cr.fill_preserve()
             #outline	
             cr.set_source_rgb(0, 0, 0)
