@@ -238,8 +238,11 @@ def SetUpPosition():
     for AS in asns:
         x = AS["x"]
         y = AS["y"]
-        #remap asns if using fisheye effect
+        #if using fisheye effect
         if focus_asn > -1:
+            size = AS["size"]
+            old_x0 = x
+            old_x1 = x + size
             new_coords = FishEye(x, y, focus_x, focus_y)
             AS["x"]  = x = new_coords[0]
             AS["y"]  = y = new_coords[1]
@@ -260,7 +263,7 @@ def SetUpPosition():
         elif y+size > max_y: 
             max_y = y+size
     
-    #increase min max x y slightly, move all ASNes to adjust 
+    #increase min max x y slightly, move all ASNes and focus to adjust 
     min_x += min_x*.05
     min_y += min_y*.05
     for AS in asns:
@@ -415,7 +418,7 @@ def FishEye(x, y, focus_x, focus_y):
     angle = math.atan2(y - focus_y, x - focus_x) 
     r = math.sqrt(math.pow(x-focus_x, 2) + math.pow(y - focus_y, 2))
     #focal length of the "lens"  
-    f = 750
+    f = 300
     #angle from optical axis
     theta = math.atan2(r,f)
     #calculate new distance from focus point
@@ -492,7 +495,11 @@ def PrintLinks(cr, max_value, scale):
 #helper method for printGraph to print the nodes onto the image
 def PrintNodes(cr, scale):
     seen = set()
+    focus_asn_node = None
     for AS in asns:
+        if int(AS["id"]) == focus_asn:
+            focus_asn_node = AS
+            continue
         #calculate coordinates and get colors
         x = AS["x"] * scale 
         y = AS["y"] * scale
@@ -502,24 +509,33 @@ def PrintNodes(cr, scale):
         nodeInfo = ("nodes", size, x, y, color)
         #skip if is duplicate
         if nodeInfo not in seen:
-            seen.add(nodeInfo)
-            #save current context with no path
-            cr.save()
-            #plot point
-            cr.rectangle(x, y, size, size)
-            #fill with color 
-            if focus_asn == int(AS["id"]):
-                cr.set_source_rgb(1, 1, 1)
-            else:
-                cr.set_source_rgb(color[0], color[1], color[2])
-            cr.fill_preserve()
-            #outline	
-            cr.set_source_rgb(0, 0, 0)
-            cr.set_line_width(1)
-            cr.stroke()
-            #restore to saved context to wipe path
-            cr.restore()
+            PrintNode(cr, AS, scale)
+    if focus_asn_node is not None:
+        PrintNode(cr, focus_asn_node, scale)
     return
+def PrintNode(cr, AS, scale):
+    #calculate coordinates and get colors
+    x = AS["x"] * scale 
+    y = AS["y"] * scale
+    #decrease size so that dots arent too big 
+    size = AS["size"] * scale
+    color = AS["color"]
+    #save current context with no path
+    cr.save()
+    #plot point
+    cr.rectangle(x, y, size, size)
+    #fill with color 
+    if focus_asn == int(AS["id"]):
+        cr.set_source_rgb(1, 1, 1)
+    else:
+        cr.set_source_rgb(color[0], color[1], color[2])
+    cr.fill_preserve()
+    #outline	
+    cr.set_source_rgb(0, 0, 0)
+    cr.set_line_width(1)
+    cr.stroke()
+    #restore to saved context to wipe path
+    cr.restore()
 #helper method for printGraph to print the color key onto the image
 def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     max_x = new_max_x * 0.95
