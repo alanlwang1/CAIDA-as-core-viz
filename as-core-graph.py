@@ -29,7 +29,9 @@ drawing_mode = "full"
 #target AS to focus on 
 target_AS = set()
 #Name of output file to write graph to
-output_file = "graph6.png"
+output_file = "graph"
+#file format of output file to write graph to
+file_format = "PNG"
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
@@ -49,7 +51,8 @@ def main(argv):
     global asns
     global target_AS
     global output_file
- 
+    global file_format
+   
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")   
@@ -62,6 +65,7 @@ def main(argv):
     parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
     parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
     parser.add_argument("-O", type=str, default=None, nargs='?', const="", dest="output_file", help="Name of output file to write graph to")
+    parser.add_argument("-f", type=str, default="PNG", nargs='?', const="", dest="file_format", choices=["SVG","PDF","PNG"], help="file format of output file to write graph to")
     args = parser.parse_args()
 
     if args.url is None:
@@ -121,7 +125,13 @@ def main(argv):
         else:
             print_help()
             sys.exit()
-            
+
+    if args.file_format is not None:
+        if args.file_format != "":
+            file_format = args.file_format
+        else:
+            print_help()
+            sys.exit()
     #if drawing mode is still the default
     if drawing_mode == "full": 
         asns = ParseAsns(args.url)
@@ -616,7 +626,15 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     max_y = new_max_y * scale
     WIDTH = int(new_max_x) 
     HEIGHT = int(new_max_y * 0.8) 
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
+    
+    if file_format == "PDF":
+        print("using pdf")
+        surface = cairo.PDFSurface(output_file, WIDTH, HEIGHT)
+    if file_format == "SVG":
+        print("using svg") 
+        surface = cairo.SVGSurface(output_file, WIDTH, HEIGHT)
+    if file_format == "PNG":
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT) 
     cr = cairo.Context(surface)
     
 	
@@ -638,7 +656,8 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	#$max_x = PrintKey($max_x,$max_y, $max_value);
 	#}
 	#PrintEnder();
-    surface.write_to_png(output_file) 
+    if file_format == "PNG":
+        surface.write_to_png(output_file) 
     return
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
