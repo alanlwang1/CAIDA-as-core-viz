@@ -56,6 +56,7 @@ def main(argv):
     parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
     parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
     parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
+    parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
     args = parser.parse_args()
 
     if args.url is None:
@@ -84,8 +85,9 @@ def main(argv):
     if args.target is not None:
         if args.target != "":
             if drawing_mode == "full": 
-                drawing_mode = "target" 
-                ParseTargetLinks(args.url, args.target)
+                drawing_mode = "target"     
+                target_list = args.target.split(",")
+                target_AS = ParseTargetLinks(args.url, target_list)
         else: 
             print_help()
             sys.exit()
@@ -96,6 +98,15 @@ def main(argv):
                 drawing_mode = "single_link" 
                 ParseSingleLink(args.url, args.link_asns)
         else: 
+            print_help()
+            sys.exit()
+
+    if args.org_name is not None:
+        if args.org_name != "":
+            drawing_mode = "target"
+            member_list = ParseOrg(args.url, args.org_name)
+            target_AS = ParseTargetLinks(args.url, member_list)
+        else:
             print_help()
             sys.exit()
 
@@ -135,15 +146,14 @@ def ParseFirstPage(url):
             seen_asns.add(asn1)
             ParseAsn(url, asn1) 
 #method to parse links of target AS
-def ParseTargetLinks(url, target):
+def ParseTargetLinks(url, target_list):
     global verbose
     global links
-    global target_AS
-    
-    target_list = target.split(",")
-    target_AS = set(target_list)
+
     seen_asns = set()
-    for target in target_AS:
+    target_AS = set()
+    for target in target_list:
+        target_AS.add(target)
         #add target asn to as list
         ParseAsn(url, target)
         new_url = "http://" + url + "/asns/" + target + "/links"
@@ -159,7 +169,8 @@ def ParseTargetLinks(url, target):
                 ParseAsn(url, str(link["asn"]))
             link["asn1"] = link["asn"] 
         links.extend(link_data)
-
+    
+    return target_AS
 #method to parse single link
 def ParseSingleLink(url, link_data):
     global verbose    
@@ -184,6 +195,17 @@ def ParseSingleLink(url, link_data):
     link_data["asn0"] = int(asn0)
     link_data["asn1"] = int(asn1)    
     links.append(link_data)
+#method to parse organization name and get member list to set targets
+def ParseOrg(url, org_name):
+    global verbose
+    global target_AS 
+    new_url = "http://" + url + "/orgs/" + org_name
+     
+    if verbose:
+        print ("loading",new_url)
+    org_json = url_load(new_url)
+    members = org_json["data"]["members"]
+    return members     
 #method to parse a single asn
 def ParseAsn(url, asn): 
     global asns
@@ -300,9 +322,12 @@ def TargetChangeSize():
     for AS in asns:
         AS["size"] = AS["size"] * 1.10
     for target_id in target_AS:
+        print(target_id)
         target = asSearch(int(target_id))
-        target["size"] = MAX_SIZE * 1.10
-   
+        if target != None:
+            print("changing target size")
+            target["size"] = MAX_SIZE * 1.10
+           
 ###########################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition():
@@ -323,9 +348,11 @@ def SetUpPosition():
         AS = asns[asIndex]
         value = key_function(AS)
         if "longitude" not in AS or value is None or value <= 0:
+            '''
             if focus_asn == int(AS["id"]):
                 sys.stderr.write("invalid focus asn")
-                sys.exit()                               
+                sys.exit()
+            '''                               
             num_asn_skipped += 1
             #pop last AS from end of list
             temp = asns.pop();
@@ -353,8 +380,8 @@ def SetUpPosition():
     if verbose:
         print("Assigning coordinates to nodes (num nodes:",len(asns),")")
     #loop through current asn list, calculating and adding coordinates to each asn  
-    focus_x = 0
-    focus_y = 0
+    #focus_x = 0
+    #focus_y = 0
     for AS in asns:
         value = key_function(AS)
         angle = -2 * 3.14 * float(AS["longitude"]) / 360
@@ -368,10 +395,11 @@ def SetUpPosition():
         AS["y"] = y
         AS["size"] = size
         AS["color"] = Value2Color(value/max_value)
+        
         #store x and y values outside loop if AS is focus asn
-        if focus_asn == int(AS["id"]):
-            focus_x = AS["x"]
-            focus_y = AS["y"]
+        #if focus_asn == int(AS["id"]):
+            #focus_x = AS["x"]
+            #focus_y = AS["y"]
     '''
     for AS in asns:
         x = AS["x"]
@@ -630,11 +658,11 @@ def PrintLinks(cr, max_value, scale):
 #helper method for printGraph to print the nodes onto the image
 def PrintNodes(cr, scale):
     seen = set()
-    focus_asn_node = None
+    #focus_asn_node = None
     for AS in asns:
-        if int(AS["id"]) == focus_asn:
-            focus_asn_node = AS
-            continue
+        #if int(AS["id"]) == focus_asn:
+            #focus_asn_node = AS
+            #continue
         #calculate coordinates and get colors
         x = AS["x"] * scale 
         y = AS["y"] * scale
@@ -645,8 +673,8 @@ def PrintNodes(cr, scale):
         #skip if is duplicate
         if nodeInfo not in seen:
             PrintNode(cr, AS, scale)
-    if focus_asn_node is not None:
-        PrintNode(cr, focus_asn_node, scale)
+    #if focus_asn_node is not None:
+        #PrintNode(cr, focus_asn_node, scale)
     return
 def PrintNode(cr, AS, scale):
     #calculate coordinates and get colors
@@ -660,10 +688,7 @@ def PrintNode(cr, AS, scale):
     #plot point
     cr.rectangle(x, y, size, size)
     #fill with color 
-    if focus_asn == int(AS["id"]):
-        cr.set_source_rgb(1, 1, 1)
-    else:
-        cr.set_source_rgb(color[0], color[1], color[2])
+    cr.set_source_rgb(color[0], color[1], color[2])
     cr.fill_preserve()
     #outline	
     cr.set_source_rgb(0, 0, 0)
