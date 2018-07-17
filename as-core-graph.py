@@ -15,7 +15,7 @@ grayscale = False
 #boolean controlling whether to print color key on image
 print_key = False
 #number of the asn to focus on with fisheye effect
-focus_asn = -1 
+#focus_asn = -1 
 #array holding object data of asns from file
 asns = []
 #dictionary holding asns as keys to AS values
@@ -27,9 +27,7 @@ MAX_SIZE = 18
 #drawing mode of graph
 drawing_mode = "full" 
 #target AS to focus on 
-target_AS = ""
-#boolean controlling whether to print background on image
-print_background = False
+target_AS = set()
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
@@ -50,28 +48,27 @@ def main(argv):
     global target_AS
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
-    #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
+    #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")   
+    #parser.add_argument("-f", type=int, nargs='?', const=-1, dest="focus", help="number of AS to focus on using fisheye effect")
     parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
-    parser.add_argument("-f", type=int, nargs='?', const=-1, dest="focus", help="number of AS to focus on using fisheye effect")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
     parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
-    parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asn to display neighbors of") 
+    parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
     parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
-    parser.add_argument("-b", dest="background", help="prints out remaining asnes and links in the background")
     args = parser.parse_args()
 
     if args.url is None:
         print_help()
         sys.exit()
-
+    '''
     if args.focus is not None:
         if args.focus > -1:
             focus_asn = args.focus
         else: 
             print_help()
             sys.exit()
-
+    '''
     if args.print_key:
         print_key = True
 
@@ -88,7 +85,6 @@ def main(argv):
         if args.target != "":
             if drawing_mode == "full": 
                 drawing_mode = "target" 
-                target_AS = args.target
                 ParseTargetLinks(args.url, args.target)
         else: 
             print_help()
@@ -142,21 +138,28 @@ def ParseFirstPage(url):
 def ParseTargetLinks(url, target):
     global verbose
     global links
-    new_url = "http://" + url + "/asns/" + target + "/links"
+    global target_AS
     
-    if verbose:
-        print ("loading",new_url)
-    links_json = url_load(new_url)
-    link_data = links_json["data"]
-    links.extend(link_data)
+    target_list = target.split(",")
+    target_AS = set(target_list)
+    seen_asns = set()
+    for target in target_AS:
+        #add target asn to as list
+        ParseAsn(url, target)
+        new_url = "http://" + url + "/asns/" + target + "/links"
+        if verbose:
+            print ("loading",new_url)
+        links_json = url_load(new_url)
+        link_data = links_json["data"]
+        #assign dictionary values and add asns to support code below
+        for link in link_data:
+            link["asn0"] = int(target)
+            if str(link["asn"]) not in seen_asns:
+                seen_asns.add(str(link["asn"]))
+                ParseAsn(url, str(link["asn"]))
+            link["asn1"] = link["asn"] 
+        links.extend(link_data)
 
-    #add target asn to as list
-    ParseAsn(url, target)
-    #assign dictionary values and add asns to support code below
-    for link in links:
-        link["asn0"] = int(target)
-        ParseAsn(url, str(link["asn"]))
-        link["asn1"] = link["asn"] 
 #method to parse single link
 def ParseSingleLink(url, link_data):
     global verbose    
@@ -296,11 +299,10 @@ def GetMaxValue():
 def TargetChangeSize():
     for AS in asns:
         AS["size"] = AS["size"] * 1.10
-    target = asSearch(int(target_AS))
-    target["size"] = MAX_SIZE * 1.10
+    for target_id in target_AS:
+        target = asSearch(int(target_id))
+        target["size"] = MAX_SIZE * 1.10
    
-    for link in links:
-        link["width"] = 2
 ###########################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition():
@@ -370,6 +372,7 @@ def SetUpPosition():
         if focus_asn == int(AS["id"]):
             focus_x = AS["x"]
             focus_y = AS["y"]
+    '''
     for AS in asns:
         x = AS["x"]
         y = AS["y"]
@@ -382,7 +385,7 @@ def SetUpPosition():
             new_coords = FishEye(x, y, focus_x, focus_y)
             AS["x"]  = x = new_coords[0]
             AS["y"]  = y = new_coords[1]
-    
+    '''
     #increase min max x y slightly, move all ASNes to adjust 
     min_x += min_x*.05
     min_y += min_y*.05
@@ -393,10 +396,14 @@ def SetUpPosition():
     max_y -= min_y
     min_x = min_y = 0
     
+    if len(target_AS) != 0:
+        print("changing size") 
+        TargetChangeSize()
+
 	#link stuff
     if verbose:
         print("Assigning coordinates to links (num links:",len(links),")")
-
+    
     #number of links skipped because of skipped asn
     num_links_skipped = 0;
     #index for traversing through link list  
@@ -440,12 +447,15 @@ def SetUpPosition():
         #calculate color
         value = link[selected_key]
         link["color"] = Value2Color(value/max_value)
-        link["width"] = 0.5
+
+        if len(target_AS) != 0:
+            link["width"] = 2
+        else:
+            link["width"] = 0.5
+
         linkIndex += 1
     
-    if target_AS != "":
-        print("changing size") 
-        TargetChangeSize()
+
    
     print ("numNodes:", len(asns),"numSkipped:",num_asn_skipped)
     print ("numLinks:", len(links),"numSkipped:",num_links_skipped) 
