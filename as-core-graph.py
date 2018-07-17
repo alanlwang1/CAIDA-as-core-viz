@@ -28,6 +28,8 @@ MAX_SIZE = 18
 drawing_mode = "full" 
 #target AS to focus on 
 target_AS = set()
+#Name of output file to write graph to
+output_file = "graph6.png"
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
@@ -46,6 +48,8 @@ def main(argv):
     global links
     global asns
     global target_AS
+    global output_file
+ 
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")   
@@ -57,6 +61,7 @@ def main(argv):
     parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
     parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
     parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
+    parser.add_argument("-O", type=str, default=None, nargs='?', const="", dest="output_file", help="Name of output file to write graph to")
     args = parser.parse_args()
 
     if args.url is None:
@@ -110,6 +115,13 @@ def main(argv):
             print_help()
             sys.exit()
 
+    if args.output_file is not None:
+        if args.output_file != "":
+            output_file = args.output_file
+        else:
+            print_help()
+            sys.exit()
+            
     #if drawing mode is still the default
     if drawing_mode == "full": 
         asns = ParseAsns(args.url)
@@ -322,10 +334,8 @@ def TargetChangeSize():
     for AS in asns:
         AS["size"] = AS["size"] * 1.10
     for target_id in target_AS:
-        print(target_id)
         target = asSearch(int(target_id))
         if target != None:
-            print("changing target size")
             target["size"] = MAX_SIZE * 1.10
            
 ###########################
@@ -425,7 +435,6 @@ def SetUpPosition():
     min_x = min_y = 0
     
     if len(target_AS) != 0:
-        print("changing size") 
         TargetChangeSize()
 
 	#link stuff
@@ -629,7 +638,7 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	#$max_x = PrintKey($max_x,$max_y, $max_value);
 	#}
 	#PrintEnder();
-    surface.write_to_png("graph6.png") 
+    surface.write_to_png(output_file) 
     return
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
