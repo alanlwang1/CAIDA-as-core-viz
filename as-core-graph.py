@@ -24,6 +24,10 @@ asn_dict = {}
 links = []
 #maximum size of a visualized asn
 MAX_SIZE = 18
+#drawing mode of graph
+drawing_mode = "full" 
+#target AS to focus on 
+target_as = "-1"
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
@@ -38,20 +42,25 @@ def main(argv):
     global print_key
     global key_function
     global focus_asn
+    global drawing_mode
     parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers()
+    mode_parser = subparser.add_parser("mode", help="drawing modes")
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
     parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
     parser.add_argument("-f", type=int, nargs='?', const=-1, dest="focus", help="number of AS to focus on using fisheye effect")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
+    mode_parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
+    mode_parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asn to display neighbors of") 
+    mode_parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
     args = parser.parse_args()
-    
+
     if args.url is None:
         print_help()
         sys.exit()
-
-    if args.focus is not None:    
+    if args.focus is not None:
         if args.focus > -1:
             focus_asn = args.focus
         else: 
@@ -60,15 +69,39 @@ def main(argv):
 
     if args.print_key:
         print_key = True
-   
+
     if args.verbose:
         verbose = True
-    
-    if selected_key is "customer_cone_asnes":
-        key_function = CustomerConeAsnes    
 
-    ParseAsns(args.url)
-    ParseLinks(args.url)
+    if args.first_page is not None:
+        if args.first_page:
+            drawing_mode = "first_page"
+            #function to only load in first page of links
+   
+    if args.target is not None:
+        if args.target != "":
+            drawing_mode = "target" 
+            #function to load in only that AS and its neighboring links
+        else: 
+            print_help()
+            sys.exit()
+
+    if args.link_asns is not None:
+        if args.link_asns != "":  
+            drawing_mode = "single_link" 
+            link_AS_list = args.link_asns.split(',')
+            #function to load in only that link
+        else: 
+            print_help()
+            sys.exit()
+
+    if selected_key is "customer_cone_asnes":
+        key_function = CustomerConeAsnes 
+
+    #if drawing mode is still the default
+    if drawing_mode == "full": 
+        ParseAsns(args.url)
+        ParseLinks(args.url)
 
     min_x, min_y, max_x, max_y, max_value = SetUpPosition()
     PrintGraph(min_x, min_y, max_x, max_y, max_value)
@@ -238,6 +271,7 @@ def SetUpPosition():
     for AS in asns:
         x = AS["x"]
         y = AS["y"]
+        size = AS["size"]
         #if using fisheye effect
         if focus_asn > -1:
             size = AS["size"]
