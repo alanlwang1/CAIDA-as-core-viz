@@ -27,7 +27,9 @@ MAX_SIZE = 18
 #drawing mode of graph
 drawing_mode = "full" 
 #target AS to focus on 
-target_as = "-1"
+target_AS = ""
+#boolean controlling whether to print background on image
+print_background = False
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
@@ -43,6 +45,9 @@ def main(argv):
     global key_function
     global focus_asn
     global drawing_mode
+    global links
+    global asns
+    global target_AS
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
@@ -53,6 +58,7 @@ def main(argv):
     parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
     parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asn to display neighbors of") 
     parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
+    parser.add_argument("-b", dest="background", help="prints out remaining asnes and links in the background")
     args = parser.parse_args()
 
     if args.url is None:
@@ -82,6 +88,7 @@ def main(argv):
         if args.target != "":
             if drawing_mode == "full": 
                 drawing_mode = "target" 
+                target_AS = args.target
                 ParseTargetLinks(args.url, args.target)
         else: 
             print_help()
@@ -98,8 +105,8 @@ def main(argv):
 
     #if drawing mode is still the default
     if drawing_mode == "full": 
-        ParseAsns(args.url)
-        ParseLinks(args.url)
+        asns = ParseAsns(args.url)
+        links = ParseLinks(args.url)
 
     if selected_key is "customer_cone_asnes":
         key_function = CustomerConeAsnes 
@@ -185,7 +192,6 @@ def ParseAsn(url, asn):
 #method to populate links array with object data from url
 def ParseLinks(url):
     global verbose
-    global links
     new_url = "http://" + url + "/links"
     if verbose:
         print ("loading",new_url)
@@ -201,10 +207,10 @@ def ParseLinks(url):
         new_url = "http://" + url + "/links?page=" + str(page_count)
         links_json = url_load(new_url)
         link_data = links_json["data"]
+    return links
 #method to populate asn array with object data from url
 def ParseAsns(url):
     global verbose
-    global asns
     new_url = "http://" + url + "/asns?populate"
     if verbose:
         print ("loading",new_url)
@@ -220,6 +226,7 @@ def ParseAsns(url):
         new_url = "http://" + url + "/asns?populate&page=" + str(page_count)
         asn_json = url_load(new_url)
         asn_data = asn_json["data"]
+    return asns
 #method to pull data from online url
 def download(url):
     try:
@@ -286,10 +293,17 @@ def GetMaxValue():
     max_AS = max_json["data"][0]
     max_value = key_function(max_AS)
     return max_value
+def TargetChangeSize():
+    for AS in asns:
+        AS["size"] = AS["size"] * 1.10
+    target = asSearch(int(target_AS))
+    target["size"] = MAX_SIZE * 1.10
+   
+    for link in links:
+        link["width"] = 2
 ###########################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition():
-    global links
     #bounds for graph
     min_x = 0
     min_y = 0
@@ -378,7 +392,7 @@ def SetUpPosition():
     max_x -= min_x
     max_y -= min_y
     min_x = min_y = 0
-
+    
 	#link stuff
     if verbose:
         print("Assigning coordinates to links (num links:",len(links),")")
@@ -426,8 +440,13 @@ def SetUpPosition():
         #calculate color
         value = link[selected_key]
         link["color"] = Value2Color(value/max_value)
+        link["width"] = 0.5
         linkIndex += 1
-
+    
+    if target_AS != "":
+        print("changing size") 
+        TargetChangeSize()
+   
     print ("numNodes:", len(asns),"numSkipped:",num_asn_skipped)
     print ("numLinks:", len(links),"numSkipped:",num_links_skipped) 
     return min_x, min_y, max_x, max_y, max_value
@@ -586,6 +605,7 @@ def PrintLinks(cr, max_value, scale):
         x2 = link["x2"] * scale
         y2 = link["y2"] * scale
         color = link["color"]
+        width = link["width"]
         linkInfo = ("links", x1, y1, x2, y2, color)
         #skip if is duplicate
         if linkInfo not in seen:
@@ -594,7 +614,7 @@ def PrintLinks(cr, max_value, scale):
             cr.move_to(x1,y1)
             cr.line_to(x2, y2)
             cr.set_source_rgb(color[0], color[1], color[2])
-            cr.set_line_width(0.5)
+            cr.set_line_width(link["width"])
             cr.stroke()			
     return
 #helper method for printGraph to print the nodes onto the image
