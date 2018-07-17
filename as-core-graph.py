@@ -44,22 +44,21 @@ def main(argv):
     global focus_asn
     global drawing_mode
     parser = argparse.ArgumentParser()
-    subparser = parser.add_subparsers()
-    mode_parser = subparser.add_parser("mode", help="drawing modes")
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")
     parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
     parser.add_argument("-f", type=int, nargs='?', const=-1, dest="focus", help="number of AS to focus on using fisheye effect")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
-    mode_parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
-    mode_parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asn to display neighbors of") 
-    mode_parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
+    parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
+    parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asn to display neighbors of") 
+    parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
     args = parser.parse_args()
 
     if args.url is None:
         print_help()
         sys.exit()
+
     if args.focus is not None:
         if args.focus > -1:
             focus_asn = args.focus
@@ -75,41 +74,117 @@ def main(argv):
 
     if args.first_page is not None:
         if args.first_page:
-            drawing_mode = "first_page"
-            #function to only load in first page of links
+            if drawing_mode == "full":
+                drawing_mode = "first_page"
+                ParseFirstPage(args.url)
    
     if args.target is not None:
         if args.target != "":
-            drawing_mode = "target" 
-            #function to load in only that AS and its neighboring links
+            if drawing_mode == "full": 
+                drawing_mode = "target" 
+                ParseTargetLinks(args.url, args.target)
         else: 
             print_help()
             sys.exit()
 
     if args.link_asns is not None:
         if args.link_asns != "":  
-            drawing_mode = "single_link" 
-            link_AS_list = args.link_asns.split(',')
-            #function to load in only that link
+            if drawing_mode == "full":
+                drawing_mode = "single_link" 
+                ParseSingleLink(args.url, args.link_asns)
         else: 
             print_help()
             sys.exit()
-
-    if selected_key is "customer_cone_asnes":
-        key_function = CustomerConeAsnes 
 
     #if drawing mode is still the default
     if drawing_mode == "full": 
         ParseAsns(args.url)
         ParseLinks(args.url)
 
+    if selected_key is "customer_cone_asnes":
+        key_function = CustomerConeAsnes 
+
     min_x, min_y, max_x, max_y, max_value = SetUpPosition()
     PrintGraph(min_x, min_y, max_x, max_y, max_value)
-###########################
+###########################\
+#method to parse the first page of links
+def ParseFirstPage(url):
+    global verbose
+    global links    
+    seen_asns = set()
+    new_url = "http://" + url + "/links?populated"
+
+    if verbose:
+        print ("loading",new_url)
+    links_json = url_load(new_url)
+    link_data = links_json["data"]
+    links.extend(link_data)
+
+    #aadd asns to list
+    for link in links:
+        asn0 = str(link["asn0"])
+        #ignore duplicates
+        if asn0 not in seen_asns:
+            seen_asns.add(asn0)
+            ParseAsn(url, asn0)
+        asn1 = str(link["asn1"])
+        if asn1 not in seen_asns:
+            seen_asns.add(asn1)
+            ParseAsn(url, asn1) 
+#method to parse links of target AS
+def ParseTargetLinks(url, target):
+    global verbose
+    global links
+    new_url = "http://" + url + "/asns/" + target + "/links"
+    
+    if verbose:
+        print ("loading",new_url)
+    links_json = url_load(new_url)
+    link_data = links_json["data"]
+    links.extend(link_data)
+
+    #add target asn to as list
+    ParseAsn(url, target)
+    #assign dictionary values and add asns to support code below
+    for link in links:
+        link["asn0"] = int(target)
+        ParseAsn(url, str(link["asn"]))
+        link["asn1"] = link["asn"] 
+#method to parse single link
+def ParseSingleLink(url, link_data):
+    global verbose    
+    global links
+    link_list = link_data.split(",")
+
+    if len(link_list) != 2:
+        sys.stderr.write("invalid entry")
+        sys.exit()
+    asn0 = link_list[0]
+    asn1 = link_list[1]
+    #add AS in link to list 
+    ParseAsn(url, asn0)
+    ParseAsn(url, asn1) 
+    new_url = "http://" + url + "/links/" + asn0 + "/" + asn1
+
+    if verbose:
+        print ("loading",new_url)
+    links_json = url_load(new_url)
+    link_data = links_json["data"]
+    #assign dictionary values to support code below
+    link_data["asn0"] = int(asn0)
+    link_data["asn1"] = int(asn1)    
+    links.append(link_data)
+#method to parse a single asn
+def ParseAsn(url, asn): 
+    global asns
+    new_url = "http://" + url + "/asns/" + asn
+    
+    asn_json = url_load(new_url)
+    asn_data = asn_json["data"] 
+    asns.append(asn_data)
 #method to populate links array with object data from url
 def ParseLinks(url):
     global verbose
-    global asns
     global links
     new_url = "http://" + url + "/links"
     if verbose:
@@ -204,6 +279,13 @@ def jsonl_load(filename):
             objects.append(decoder.decode(line))
     return objects
 '''
+#method to get the max value when not using full graph
+def GetMaxValue():
+    url = "http://as-rank.caida.org/api/v1/asns?populate&ranked&count=1"
+    max_json = url_load(url)
+    max_AS = max_json["data"][0]
+    max_value = key_function(max_AS)
+    return max_value
 ###########################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition():
@@ -239,13 +321,19 @@ def SetUpPosition():
         else:	
             #add AS object to dictionary
             asn_dict[int(AS["id"])] = AS
-            #check for max value            
-            if value > max_value:
-                max_value = value
             #move loop forward
             asIndex += 1
-    print("maxValue:" + str(max_value) + "\n")
 
+    #get max value from url 
+    max_value = GetMaxValue()
+    print("maxValue:" + str(max_value) + "\n")
+    #set min max x y based on max value
+    radius = (math.log(max_value+1) - math.log(0+1) +.5)*100
+    min_x = radius * math.cos(math.pi)
+    max_x = radius * math.cos(0) 
+    min_y = radius * math.sin(math.pi * 3/2)    
+    max_y = radius * math.sin(math.pi/2)
+    
     if verbose:
         print("Assigning coordinates to nodes (num nodes:",len(asns),")")
     #loop through current asn list, calculating and adding coordinates to each asn  
@@ -280,24 +368,8 @@ def SetUpPosition():
             new_coords = FishEye(x, y, focus_x, focus_y)
             AS["x"]  = x = new_coords[0]
             AS["y"]  = y = new_coords[1]
-        #adjust min and max x based on new X
-        if min_x == 0:  
-            min_x = x 
-            max_x = size + x
-        elif x < min_x:
-            min_x = x
-        elif x+size > max_x:
-            max_x = x+size
-        #adjust min and max y based on new Y
-        if min_y == 0:
-            min_y = y
-            max_x = size + x
-        elif y < min_y:
-            min_y = y
-        elif y+size > max_y: 
-            max_y = y+size
     
-    #increase min max x y slightly, move all ASNes and focus to adjust 
+    #increase min max x y slightly, move all ASNes to adjust 
     min_x += min_x*.05
     min_y += min_y*.05
     for AS in asns:
@@ -478,7 +550,6 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     max_y = new_max_y * scale
     WIDTH = int(new_max_x) 
     HEIGHT = int(new_max_y * 0.8) 
-    
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
     cr = cairo.Context(surface)
     
