@@ -7,6 +7,7 @@ import cairo
 import urllib.request
 import urllib.parse
 import urllib.error
+import re
 
 #boolean controlling whether to print messages about run status
 verbose = False
@@ -636,9 +637,6 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     if file_format == "PNG":
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT) 
     cr = cairo.Context(surface)
-    
-	
-	
 	
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:
@@ -646,7 +644,7 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     cr.translate((WIDTH - max_x) / 2, (HEIGHT - max_y) / 2) 
     PrintLinks(cr, max_value, scale)
     PrintNodes(cr, scale)
-	PrintNames(cr, scale)
+    PrintNames(cr, scale)
 
 	# We do not need suppport for this now
 	#if (defined $name_file) {
@@ -731,8 +729,8 @@ def PrintNames(cr, scale):
         size = AS["size"] * scale
         x0 = AS["x"] * scale
         y0 = AS["y"] * scale
-        x1 = x += size 
-        y1 = y += size
+        x1 = x0 + size 
+        y1 = y0 + size
         node_info.append({"x0" : x0, "y0" : y0, "x1" : x1, "y1" : y1})
     name_info = []
     reverse_asns = list(reversed(asns))
@@ -748,7 +746,7 @@ def PrintNames(cr, scale):
             #next if (defined $name_filter && $value < $name_filter);
 
             size = AS["size"]
-            font_size = "%.1f" % 17 * size / MAX_SIZE
+            font_size = "%.1f" % (17 * size / MAX_SIZE)
             stroke_size = "%.1f" % (0.5 * size / MAX_SIZE + 2)
 
             name = re.sub(r'Communication.*', '', name)
@@ -758,157 +756,58 @@ def PrintNames(cr, scale):
             name = re.sub(r'.+de Redes Colomsat S.A', 'Administracin de', name)
             
             name = AS["id"] + " (" + name + ") "
-            center_x = AS["x"] + AS["size"] / 2
-            center_y = AS["y"] + AS["size"] / 2
+            center_x = (AS["x"] + AS["size"] / 2) * scale
+            center_y = (AS["y"] + AS["size"] / 2) * scale
             color = AS["color"]
-
-            theta = 0
-            name_info = []
-            #overlap
             
             width = 0
-            for char in list(name):
+            for char in name:
+                if char.isupper():
+                    width = width + (0.5 * float(font_size))
+                else:
+                    width = width + (0.4 * float(font_size))
 
-    '''
-    my @nodes = @_;
+            height = 0.8 * float(font_size)
+                 
+            theta = 0
+            name_info_list = []
+            #overlap
 
-    my @node_info;
-    foreach my $as (@nodes) {
-	my $size = $as2rec{$as}{size};
-	my $x0 = $as2rec{$as}{x} - $size/2;
-	my $y0 = $as2rec{$as}{y} - $size/2;
-	my $x1 += $size;
-	my $y1 += $size;
-	push @node_info, {
-	    "x0" => $x0,
-	    "y0" => $y0,
-	    "x1" => $x1,
-	    "y1" => $y1
-	    };
-    }
-    my @name_info;
-    print qq(<g id="Names">\n);
-    my @as = reverse @nodes;
-    foreach my $index (0..$#as) {
-	my $as = $as[$index];
-	my $name = $as2rec{$as}{name};
-	my @names = split /\s+/, $name;
-	if ($#names > 0) {
-	    $name = $names[0]." ".$names[1];
-	}
-	next unless (defined $name);
+            size = size * 0.75 * scale
+            while (theta < 2 * math.pi):
+                x = center_x + size * math.cos(theta)
+                y = center_y + size * math.sin(theta) 
+                x0 = x
+                y0 = y
+                x1 = x + width
+                y1 = y + height
+                if x < center_x: 
+                    x0 = x - width
+                    x1 = x;
+                name_info = { "x" : x, "y" : y, "x0" : x0, "y0" : y0, "x1" : x1, "y1" : y1, "name" : name,}
+                overlap = None
+                for i in (name_info, node_info):
+                    if Overlap(i, name_info):
+                        overlap =1
+                        break
 
-	my $value = $as2rec{$as}{$type_sort};
-	next if (defined $name_filter && $value < $name_filter);
+                theta = theta + .1*math.pi;
+            #if overlap is None:
+            print("printing", name)
+            x = name_info["x"]
+            y = name_info["y"]
+            cr.select_font_face("Arial", cairo.FONT_SLANT_NORMAL, 
+                cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(float(font_size))
+            cr.set_source_rgb(0, 0, 0)
+            cr.move_to(x, y)
+            name = name_info["name"]
+            cr.show_text(name)
 
-	my $size = $as2rec{$as}{size};
-	my $font_size = sprintf("%0.1f", 17*$size/MAX_SIZE);
-	my $stroke_size = sprintf("%0.1f", .5*$size/MAX_SIZE)+2;
+            name_info_list.append(name_info)
 
-	$name =~ s/Communication.*//;
-	$name =~ s/-.*//;
-	$name =~ s/,.*//;
-	$name =~ s/\&/&amp;/g;
-	$name =~ s/\?//g;
-	$name =~ s/.+de Redes Colomsat S.A/Administracin de/g;
-
-	$name = "$as ($name)";
-
-	my $center_x = $as2rec{$as}{x};
-	my $center_y = $as2rec{$as}{y};
-	my $color = $as2rec{$as}{color};
-
-	my $theta = 0;
-	my $name_info;
-	my $overlap;
-
-	my $width = 0;
-	foreach my $char (split //, $name) {
-	    if ($char =~ /[a-z]/) {
-		$width += .4*$font_size;
-	    } elsif ($char =~ /[A-z]/) {
-		$width += .5*$font_size;
-	    } else {
-		$width += .4*$font_size;
-	    }
-	}
-	my $height = .8*$font_size;
-
-	$size *= .75;
-	while ($theta < 2*pi) {
-	    my $x = $center_x+ $size*cos($theta); 
-	    my $y = $center_y+ $size*sin($theta); 
-	    my $text_anchor = "start";
-	    my $x0 = $x;
-	    my $y0 = $y;
-	    my $x1 = $x + $width;
-	    my $y1 = $y + $height;
-	    if ($x < $center_x) {
-		$text_anchor = "end";
-		$x0 = $x - $width;
-		$x1 = $x;
-	    }
-	    $name_info = {
-		"x" => $x,
-		"y" => $y,
-		"x0" => $x0,
-		"y0" => $y0,
-		"x1" => $x1,
-		"y1" => $y1,
-		"name"=>$name,
-		"text_anchor" => $text_anchor
-		};
-	    $overlap = undef;
-	    foreach my $i (@name_info, @node_info) {
-		if (Overlap($i, $name_info)) {
-		    $overlap =1;
-		    last;
-		}
-	    }
-	    unless (defined $overlap) {
-		last;
-	    }
-	    $theta += .1*pi;
-	}
-	unless (defined $overlap) {
-	    my $x = $name_info->{x};
-	    my $y = $name_info->{y};
-	    my $text_anchor = $name_info->{text_anchor};
-	    my $style = "text-anchor: $text_anchor;font-size:$font_size";
-	    print "    <g>\n";
-	    print qq(         <text x="$x" y="$y" fill="black" );
-	    print qq( style="stroke:white;stroke-width:$stroke_size;$style">);
-	    print qq( $name </text>\n);
-	    print qq(         <text x="$x" y="$y" fill="black" style="$style">);
-	    print qq( $name </text>\n);
-        
-        
-#$x = $name_info->{x0};
-#$y = $name_info->{y0};
-#my $w = $name_info->{x1}-$name_info->{x0};
-#my $h = $name_info->{y1}-$name_info->{y0};
-#$y -= $h;
-#print qq(<rect x="$x" y="$y" width="$w" height="$h" fill-opacity=".2" stroke="black" stroke-width="1" font="serif"></rect>\n);
-	    print "    </g>\n";
-	    push @name_info, $name_info;
-	}
-    }
-    print "</g>\n";
-}
-
-sub Overlap {
-    my ($a,$b) = @_;
-    return (($a->{x0} <= $b->{x0} && $b->{x0} <= $a->{x1}
-	    || $a->{x0} <= $b->{x1} && $b->{x1} <= $a->{x1}
-	    || $b->{x0} <= $a->{x0} && $a->{x0} <= $b->{x1})
-	    &&
-	  ($a->{y0} <= $b->{y0} && $b->{y0} <= $a->{y1}
-	    || $a->{y0} <= $b->{y1} && $b->{y1} <= $a->{y1}
-	    || $b->{y0} <= $a->{y0} && $a->{y0} <= $b->{y1}));
-}
-'''
 def Overlap(a, b):
-    return (a["x0"] <= b["x0"] && b["x0"] <= a["x1"] || a["x0"] <= b["x1"] && b["x1"] <= a["x1"] || b["x0"] <= a["x0"] && a["x0"] <= b["x1"]) && (a["y0"] <= b["y0"] && b["y0"] <= a["y1"] || a["y0"] <= b["y1"] && b["y1"] <= a["y1"] || b["y0"] <= a["y0"] && a["y0"] <= b["y1"])
+    return (a["x0"] <= b["x0"] and b["x0"] <= a["x1"] or a["x0"] <= b["x1"] and b["x1"] <= a["x1"] or b["x0"] <= a["x0"] and a["x0"] <= b["x1"]) and (a["y0"] <= b["y0"] and b["y0"] <= a["y1"] or a["y0"] <= b["y1"] and b["y1"] <= a["y1"] or b["y0"] <= a["y0"] and a["y0"] <= b["y1"])
 #helper method for printGraph to print the color key onto the image
 def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     max_x = new_max_x * 0.95
