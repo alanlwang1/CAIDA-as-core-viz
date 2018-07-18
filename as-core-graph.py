@@ -1,4 +1,6 @@
 #!  /usr/bin/env python3
+import re
+import traceback
 import argparse
 import sys
 import math
@@ -68,9 +70,14 @@ def main(argv):
     parser.add_argument("-f", type=str, default="PNG", nargs='?', const="", dest="file_format", choices=["SVG","PDF","PNG"], help="file format of output file to write graph to")
     args = parser.parse_args()
 
+    url = None
     if args.url is None:
         print_help()
         sys.exit()
+    else:
+        url = args.url
+        if not re.search("^http",url):
+            url = "http://"+url
     '''
     if args.focus is not None:
         if args.focus > -1:
@@ -89,14 +96,14 @@ def main(argv):
         if args.first_page:
             if drawing_mode == "full":
                 drawing_mode = "first_page"
-                ParseFirstPage(args.url)
+                ParseFirstPage(url)
    
     if args.target is not None:
         if args.target != "":
             if drawing_mode == "full": 
                 drawing_mode = "target"     
                 target_list = args.target.split(",")
-                target_AS = ParseTargetLinks(args.url, target_list)
+                target_AS = ParseTargetLinks(url, target_list)
         else: 
             print_help()
             sys.exit()
@@ -105,7 +112,7 @@ def main(argv):
         if args.link_asns != "":  
             if drawing_mode == "full":
                 drawing_mode = "single_link" 
-                ParseSingleLink(args.url, args.link_asns)
+                ParseSingleLink(url, args.link_asns)
         else: 
             print_help()
             sys.exit()
@@ -113,8 +120,8 @@ def main(argv):
     if args.org_name is not None:
         if args.org_name != "":
             drawing_mode = "target"
-            member_list = ParseOrg(args.url, args.org_name)
-            target_AS = ParseTargetLinks(args.url, member_list)
+            member_list = ParseOrg(url, args.org_name)
+            target_AS = ParseTargetLinks(url, member_list)
         else:
             print_help()
             sys.exit()
@@ -134,13 +141,13 @@ def main(argv):
             sys.exit()
     #if drawing mode is still the default
     if drawing_mode == "full": 
-        asns = ParseAsns(args.url)
-        links = ParseLinks(args.url)
+        asns = ParseAsns(url)
+        links = ParseLinks(url)
 
     if selected_key is "customer_cone_asnes":
         key_function = CustomerConeAsnes 
 
-    min_x, min_y, max_x, max_y, max_value = SetUpPosition()
+    min_x, min_y, max_x, max_y, max_value = SetUpPosition(url)
     PrintGraph(min_x, min_y, max_x, max_y, max_value)
 ###########################\
 #method to parse the first page of links
@@ -148,7 +155,7 @@ def ParseFirstPage(url):
     global verbose
     global links    
     seen_asns = set()
-    new_url = "http://" + url + "/links?populated"
+    new_url = url + "/links?populated"
 
     if verbose:
         print ("loading",new_url)
@@ -178,7 +185,7 @@ def ParseTargetLinks(url, target_list):
         target_AS.add(target)
         #add target asn to as list
         ParseAsn(url, target)
-        new_url = "http://" + url + "/asns/" + target + "/links"
+        new_url = url + "/asns/" + target + "/links"
         if verbose:
             print ("loading",new_url)
         links_json = url_load(new_url)
@@ -207,7 +214,7 @@ def ParseSingleLink(url, link_data):
     #add AS in link to list 
     ParseAsn(url, asn0)
     ParseAsn(url, asn1) 
-    new_url = "http://" + url + "/links/" + asn0 + "/" + asn1
+    new_url = url + "/links/" + asn0 + "/" + asn1
 
     if verbose:
         print ("loading",new_url)
@@ -221,7 +228,7 @@ def ParseSingleLink(url, link_data):
 def ParseOrg(url, org_name):
     global verbose
     global target_AS 
-    new_url = "http://" + url + "/orgs/" + org_name
+    new_url = url + "/orgs/" + org_name
      
     if verbose:
         print ("loading",new_url)
@@ -231,15 +238,16 @@ def ParseOrg(url, org_name):
 #method to parse a single asn
 def ParseAsn(url, asn): 
     global asns
-    new_url = "http://" + url + "/asns/" + asn
+    new_url = url + "/asns/" + asn
     
     asn_json = url_load(new_url)
     asn_data = asn_json["data"] 
     asns.append(asn_data)
+
 #method to populate links array with object data from url
 def ParseLinks(url):
     global verbose
-    new_url = "http://" + url + "/links"
+    new_url = url + "/links"
     if verbose:
         print ("loading",new_url)
 
@@ -251,18 +259,19 @@ def ParseLinks(url):
     while(len(link_data) > 0):
         links.extend(link_data)
         page_count += 1
-        new_url = "http://" + url + "/links?page=" + str(page_count)
+        new_url = url + "/links?page=" + str(page_count)
         links_json = url_load(new_url)
         link_data = links_json["data"]
     return links
+
 #method to populate asn array with object data from url
 def ParseAsns(url):
     global verbose
-    new_url = "http://" + url + "/asns?populate"
+    url = url + "/asns?populate&ranked"
     if verbose:
-        print ("loading",new_url)
+        print ("loading",url)
     
-    asn_json = url_load(new_url)
+    asn_json = url_load(url)
     asn_total = asn_json["total"]
     page_count = 1;
     asn_data = asn_json["data"] 
@@ -270,10 +279,11 @@ def ParseAsns(url):
     while(len(asn_data) > 0):
         asns.extend(asn_data)
         page_count += 1
-        new_url = "http://" + url + "/asns?populate&page=" + str(page_count)
+        new_url =  url + "&page=" + str(page_count)
         asn_json = url_load(new_url)
         asn_data = asn_json["data"]
     return asns
+
 #method to pull data from online url
 def download(url):
     try:
@@ -281,13 +291,17 @@ def download(url):
         response = urllib.request.urlopen(url, timeout=5)
         return response.readline()
     except urllib.error.HTTPError as e:
-        traceback.print_stack()
+        #traceback.print_stack()
+        print ('error for url:',url);
         print ('HTTPError = ' + str(e.code))
         sys.exit()
-    except Exception:
-        traceback.print_stack()
-        print ('generic exception: ' + traceback.format_exc())
+    except Exception as e:
+        #traceback.print_stack()
+        #print ('generic exception: ' + traceback.format_exc())
+        print ('error for url:',url);
+        print ('generic exeception:',e)
         sys.exit()
+
 #method to pull data from API
 def url_load(url):
     url_data = download(url)
@@ -334,8 +348,8 @@ def jsonl_load(filename):
     return objects
 '''
 #method to get the max value when not using full graph
-def GetMaxValue():
-    url = "http://as-rank.caida.org/api/v1/asns?populate&ranked&count=1"
+def GetMaxValue(url):
+    url = url+"/asns?populate&ranked&count=1"
     max_json = url_load(url)
     max_AS = max_json["data"][0]
     max_value = key_function(max_AS)
@@ -350,7 +364,7 @@ def TargetChangeSize():
            
 ###########################
 #method to determine positions of all asn nodes and links based on data
-def SetUpPosition():
+def SetUpPosition(url):
     #bounds for graph
     min_x = 0
     min_y = 0
@@ -388,7 +402,7 @@ def SetUpPosition():
             asIndex += 1
 
     #get max value from url 
-    max_value = GetMaxValue()
+    max_value = GetMaxValue(url)
     print("maxValue:" + str(max_value) + "\n")
     #set min max x y based on max value
     radius = (math.log(max_value+1) - math.log(0+1) +.5)*100
