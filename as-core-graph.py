@@ -29,13 +29,15 @@ drawing_mode = "full"
 #target AS to focus on 
 target_AS = set()
 #Name of output file to write graph to
-output_file = "graph"
+output_file = "as-core.png"
 #file format of output file to write graph to
 file_format = "PNG"
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
 key_function = None
+#width of margin around image
+margin = 10
 
 #method to print how to run script
 def print_help():
@@ -63,8 +65,8 @@ def main(argv):
     parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
     parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
     parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
-    parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
-    parser.add_argument("-O", type=str, default=None, nargs='?', const="", dest="output_file", help="Name of output file to write graph to")
+    parser.add_argument("-O", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
+    parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="output_file", help="Name of output file to write graph to")
     parser.add_argument("-f", type=str, default="PNG", nargs='?', const="", dest="file_format", choices=["SVG","PDF","PNG"], help="file format of output file to write graph to")
     args = parser.parse_args()
 
@@ -622,11 +624,16 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     # Make calls to PyCairo
     #set up drawing area
     scale = 0.6
-    max_x = new_max_x * scale
-    max_y = new_max_y * scale
-    WIDTH = int(new_max_x) 
-    HEIGHT = int(new_max_y * 0.8) 
-    
+    if print_key:
+        max_x = new_max_x * scale
+        max_y = new_max_y * scale
+        WIDTH = int(new_max_x) 
+        HEIGHT = int(new_max_y * 0.8) 
+    else:
+        max_x = new_max_x * scale
+        max_y = new_max_y * scale
+        WIDTH = int(max_x) + margin * 2
+        HEIGHT = int(max_y) + margin * 2 
     if file_format == "PDF":
         print("using pdf")
         surface = cairo.PDFSurface(output_file, WIDTH, HEIGHT)
