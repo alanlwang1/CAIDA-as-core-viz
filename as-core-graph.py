@@ -678,7 +678,10 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	#}
 	#PrintEnder();
     if file_format == "PNG":
-        surface.write_to_png(output_file) 
+        if output_file == "-":
+            surface.write_to_png(sys.stdout.buffer)
+        else:
+            surface.write_to_png(output_file) 
     return
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
