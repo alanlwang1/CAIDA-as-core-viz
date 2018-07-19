@@ -1,0 +1,6 @@
+#
+####### requirements.txt #######
+# Requires package libcairo2-dev
+# alternatively, use package python3-cairo  
+# 
+pycairo
