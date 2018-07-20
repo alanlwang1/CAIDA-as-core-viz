@@ -66,7 +66,7 @@ def main(argv):
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
     parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
     parser.add_argument("-a", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
-    parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
+    parser.add_argument("-l", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by colon")
     parser.add_argument("-O", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
     parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="output_file", help="Name of output file to write graph to")
     parser.add_argument("-f", type=str, default="PNG", nargs='?', const="", dest="file_format", choices=["SVG","PDF","PNG"], help="file format of output file to write graph to")
@@ -206,7 +206,7 @@ def ParseTargetLinks(url, target_list):
 def ParseSingleLink(url, link_data):
     global verbose    
     global links
-    link_list = link_data.split(",")
+    link_list = link_data.split(":")
 
     if len(link_list) != 2:
         sys.stderr.write("invalid entry")
@@ -222,6 +222,8 @@ def ParseSingleLink(url, link_data):
         print ("loading",new_url)
     links_json = url_load(new_url)
     link_data = links_json["data"]
+    if link_data == None:
+        sys.stderr.write("invalid entry")
     #assign dictionary values to support code below
     link_data["asn0"] = int(asn0)
     link_data["asn1"] = int(asn1)    
