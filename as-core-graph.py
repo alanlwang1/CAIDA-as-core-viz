@@ -65,7 +65,7 @@ def main(argv):
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
     parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
-    parser.add_argument("-t", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
+    parser.add_argument("-a", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
     parser.add_argument("-s", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by comma")
     parser.add_argument("-O", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
     parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="output_file", help="Name of output file to write graph to")
@@ -363,6 +363,7 @@ def TargetChangeSize():
         target = asSearch(int(target_id))
         if target != None:
             target["size"] = MAX_SIZE * 1.10
+            target["color"] = (1, 1, 1)
            
 ###########################
 #method to determine positions of all asn nodes and links based on data
