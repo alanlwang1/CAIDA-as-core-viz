@@ -30,13 +30,15 @@ drawing_mode = "full"
 #target AS to focus on 
 target_AS = set()
 #Name of output file to write graph to
-output_file = "graph"
+output_file = "as-core.png"
 #file format of output file to write graph to
 file_format = "PNG"
 #current metric being used to create visualization
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
 key_function = None
+#smallest value to print name of AS
+name_filter = 200
 
 #method to print how to run script
 def print_help():
@@ -732,7 +734,7 @@ def PrintNames(cr, scale):
         x1 = x0 + size 
         y1 = y0 + size
         node_info.append({"x0" : x0, "y0" : y0, "x1" : x1, "y1" : y1})
-    name_info = []
+    name_info_list = []
     reverse_asns = list(reversed(asns))
     for AS in reverse_asns:
         if "name" not in AS["org"]:
@@ -742,9 +744,10 @@ def PrintNames(cr, scale):
             names = name.split()
             if len(names) > 1:
                 name = names[0] + " " + names[1]
-            value = AS["cone"]["asns"]
-            #next if (defined $name_filter && $value < $name_filter);
-
+            value = key_function(AS)
+            if value < name_filter:
+                continue
+            #next if (defined $name_filter && $value < $name_filter)
             size = AS["size"]
             font_size = "%.1f" % (17 * size / MAX_SIZE)
             stroke_size = "%.1f" % (0.5 * size / MAX_SIZE + 2)
@@ -770,7 +773,7 @@ def PrintNames(cr, scale):
             height = 0.8 * float(font_size)
                  
             theta = 0
-            name_info_list = []
+            name_info = {}
             #overlap
 
             size = size * 0.75 * scale
@@ -786,23 +789,33 @@ def PrintNames(cr, scale):
                     x1 = x;
                 name_info = { "x" : x, "y" : y, "x0" : x0, "y0" : y0, "x1" : x1, "y1" : y1, "name" : name,}
                 overlap = None
-                for i in (name_info, node_info):
-                    if Overlap(i, name_info):
-                        overlap =1
-                        break
+                for i in (name_info_list, node_info):    
+                    for info in i:
+                        if Overlap(info, name_info):
+                            overlap =1
+                            break
 
+                if overlap == None:
+                    break
                 theta = theta + .1*math.pi;
-            #if overlap is None:
-            print("printing", name)
-            x = name_info["x"]
-            y = name_info["y"]
-            cr.select_font_face("Arial", cairo.FONT_SLANT_NORMAL, 
-                cairo.FONT_WEIGHT_NORMAL)
-            cr.set_font_size(float(font_size))
-            cr.set_source_rgb(0, 0, 0)
-            cr.move_to(x, y)
-            name = name_info["name"]
-            cr.show_text(name)
+
+            if overlap is None:
+                x = name_info["x"]
+                y = name_info["y"]
+                cr.select_font_face("Arial", cairo.FONT_SLANT_NORMAL, 
+                    cairo.FONT_WEIGHT_NORMAL)
+                cr.set_font_size(float(font_size))
+
+                cr.save()
+                cr.move_to(x, y)
+                name = name_info["name"]
+                cr.text_path(name)
+                cr.set_source_rgb(1, 1, 1)
+                cr.set_line_width(float(stroke_size))
+                cr.stroke_preserve()
+                cr.set_source_rgb(0, 0, 0)
+                cr.fill()
+                cr.restore()
 
             name_info_list.append(name_info)
 
