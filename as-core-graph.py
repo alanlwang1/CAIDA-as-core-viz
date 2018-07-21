@@ -16,6 +16,8 @@ verbose = False
 grayscale = False
 #boolean controlling whether to print color key on image
 print_key = False
+#boolean controlling whether to print continent halo on image
+print_continents = False
 #number of the asn to focus on with fisheye effect
 #focus_asn = -1 
 #array holding object data of asns from file
@@ -48,6 +50,7 @@ def print_help():
 def main(argv):
     global verbose
     global print_key
+    global print_continents
     global key_function
     global focus_asn
     global drawing_mode
@@ -64,6 +67,7 @@ def main(argv):
     parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
+    parser.add_argument("-c", dest="print_continents", help="prints out continent halo for visualization", action="store_true")
     parser.add_argument("-F", default=None, dest="first_page", help="draw only the first page of links", action="store_true")
     parser.add_argument("-a", type=str, default=None, nargs='?', const="", dest="target", help="asns to display neighbors of, separated by comma") 
     parser.add_argument("-l", type=str, default=None, nargs='?', const="", dest="link_asns", help="ASnes of a single link, separated by colon")
@@ -93,6 +97,9 @@ def main(argv):
 
     if args.verbose:
         verbose = True
+    
+    if args.print_continents:
+        print_continents = True
 
     if args.first_page is not None:
         if args.first_page:
@@ -650,7 +657,8 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
         max_x = new_max_x * scale
         max_y = new_max_y * scale
         WIDTH = int(max_x) + margin * 2
-        HEIGHT = int(max_y) + margin * 2 
+        HEIGHT = int(max_y) + margin * 2
+ 
     if file_format == "PDF":
         print("using pdf")
         surface = cairo.PDFSurface(output_file, WIDTH, HEIGHT)
@@ -667,6 +675,8 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:
         PrintKey(cr, new_max_x, new_max_y, max_value, scale)
+    if print_continents:
+        PrintContinents(cr, min_x, min_y, max_x, max_y, max_value, scale)
     cr.translate((WIDTH - max_x) / 2, (HEIGHT - max_y) / 2) 
     PrintLinks(cr, max_value, scale)
     PrintNodes(cr, scale)
@@ -748,6 +758,90 @@ def PrintNode(cr, AS, scale):
     cr.stroke()
     #restore to saved context to wipe path
     cr.restore()
+#helper method for printGraph to print the continent halo onto the image
+def PrintContinents(cr, min_x, min_y, max_x, max_y, max_value, scale):
+    continents =  [
+        {
+            "name" : "North America",
+            "lon_start" : "-168.3359374",
+            "lon_end"  : "-56.8596442",
+            "order" : 0,
+            "color" : "pink"
+        },
+        {
+            "name" : "South America",
+            "lon_start" : "-83.710541",
+            "lon_end"  : "-36.601166",
+            "order" : 1,
+            "color" : "lightgreen"
+        },
+        {
+            "name" : "Europe",
+            "lon_start" : "-9.882416",
+            "lon_end"  : "33.711334",
+            "order" : 0,
+            "color" : "lightblue"
+        },
+        {
+            "name" : "Africa",
+            "lon_start" : "-16.3863222",
+            "lon_end"  : "51.3773497",
+            "order" : 1,
+            "color" : "LightCoral"
+        },
+        {
+            "name" : "Asia",
+            "lon_start"  : "33.711334",
+            "lon_end"  : "190",
+            "order" : 0,
+            "color" : "gainsboro"
+        },
+        {
+            "name" : "Oceania",
+            "lon_start" : "94.2728129",
+            "lon_end"  : "180",
+            "order" : 1,
+            "color" : "moccasin"
+        }
+        ]
+        
+        x_center = (max_x - min_x) / 2 + min_x
+        y_center = (max_y - min_y) / 2 + min_y
+        #radius = RADIUS
+    
+        for continent in continents:
+            name = continent["name"]
+            lon = (continent["lon_start"], continent["lon_end"]
+            #change this to float later
+            color = continent["color"] 
+            shift = max_value * 1.1 * continent["order"]
+
+            font_size = "%.1f" % (2 * MAX_SIZE)
+            
+            x = []
+            y = []
+            r = radius + continent["order"] * (0.5 * margin)
+            for i in range(2):
+                angle = -2 * math.pi * (lon[i] / 360)
+                x[i] = x_center + r * math.cos(angle)
+                y[i] = y_center + r * math.sin(angle)
+                
+            large_arch_flag = 0
+            sweep_flag = 0
+            theta_delta = (lon[1] - lon[0])/180
+            if theta_delta > math.pi:
+                large_arch_flag = 1
+
+            r_name = r - radius * 0.015
+            name_center = (lon[1] + lon[0]) / 2
+            angle = -2 * 3.14 * (name_center/260)
+            rotate = 90 - name_center
+            while rotate < 0:
+                 rotate = rotate + 360
+            
+            x_name = x_center + r_name * math.cos(angle)
+            y_name = y_center + r_name * math.sin(angle)
+            
 #helper method for printGraph to print the color key onto the image
 def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     max_x = new_max_x * 0.95
