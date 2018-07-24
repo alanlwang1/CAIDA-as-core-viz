@@ -59,7 +59,8 @@ def main(argv):
     global target_AS
     global output_file
     global file_format
-   
+    global margin
+
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")   
@@ -99,6 +100,7 @@ def main(argv):
         verbose = True
     
     if args.print_continents:
+        margin = 110
         print_continents = True
 
     if args.first_page is not None:
@@ -417,7 +419,7 @@ def SetUpPosition(url):
     max_value = GetMaxValue(url)
     print("maxValue:" + str(max_value) + "\n")
     #set min max x y based on max value
-    radius = (math.log(max_value+1) - math.log(0+1) +.5)*100
+    radius = (math.log(max_value+1) - math.log(1+1) +.5)*100
     min_x = radius * math.cos(math.pi)
     max_x = radius * math.cos(0) 
     min_y = radius * math.sin(math.pi * 3/2)    
@@ -668,19 +670,17 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     if file_format == "PNG":
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT) 
     cr = cairo.Context(surface)
-    
-	
-	
 	
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:
         PrintKey(cr, new_max_x, new_max_y, max_value, scale)
     if print_continents:
-        PrintContinents(cr, min_x, min_y, max_x, max_y, max_value, scale)
-    cr.translate((WIDTH - max_x) / 2, (HEIGHT - max_y) / 2) 
+        PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value, scale)   
+    cr.translate(margin - 15, margin - 15)
     PrintLinks(cr, max_value, scale)
     PrintNodes(cr, scale)
-	
+
+    
 
 	# We do not need suppport for this now
 	#if (defined $name_file) {
@@ -759,89 +759,122 @@ def PrintNode(cr, AS, scale):
     #restore to saved context to wipe path
     cr.restore()
 #helper method for printGraph to print the continent halo onto the image
-def PrintContinents(cr, min_x, min_y, max_x, max_y, max_value, scale):
+def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value, scale):
     continents =  [
         {
             "name" : "North America",
-            "lon_start" : "-168.3359374",
-            "lon_end"  : "-56.8596442",
+            "lon_start" : -168.3359374,
+            "lon_end"  : -56.8596442,
             "order" : 0,
-            "color" : "pink"
+            "color" : [255, 192, 203] #pink
         },
         {
             "name" : "South America",
-            "lon_start" : "-83.710541",
-            "lon_end"  : "-36.601166",
+            "lon_start" : -83.710541,
+            "lon_end"  : -36.601166,
             "order" : 1,
-            "color" : "lightgreen"
+            "color" : [144, 238, 144] #light green
         },
         {
             "name" : "Europe",
-            "lon_start" : "-9.882416",
-            "lon_end"  : "33.711334",
+            "lon_start" : -9.882416,
+            "lon_end"  : 33.711334,
             "order" : 0,
-            "color" : "lightblue"
+            "color" : [173, 216, 230] #light blue
         },
         {
             "name" : "Africa",
-            "lon_start" : "-16.3863222",
-            "lon_end"  : "51.3773497",
+            "lon_start" : -16.3863222,
+            "lon_end"  : 51.3773497,
             "order" : 1,
-            "color" : "LightCoral"
+            "color" : [240, 128, 128] #light coral
         },
         {
             "name" : "Asia",
-            "lon_start"  : "33.711334",
-            "lon_end"  : "190",
+            "lon_start"  : 33.711334,
+            "lon_end"  : 190,
             "order" : 0,
-            "color" : "gainsboro"
+            "color" : [220, 220, 220] #gainsboro
         },
         {
             "name" : "Oceania",
-            "lon_start" : "94.2728129",
-            "lon_end"  : "180",
+            "lon_start" : 94.2728129,
+            "lon_end"  : 180,
             "order" : 1,
-            "color" : "moccasin"
+            "color" : [255, 228, 181] #moccassin
         }
         ]
         
-        x_center = (max_x - min_x) / 2 + min_x
-        y_center = (max_y - min_y) / 2 + min_y
-        #radius = RADIUS
-    
-        for continent in continents:
-            name = continent["name"]
-            lon = (continent["lon_start"], continent["lon_end"]
-            #change this to float later
-            color = continent["color"] 
-            shift = max_value * 1.1 * continent["order"]
+    x_center = max_x / 2 + margin
+    y_center = max_y / 2 + margin 
+    #radius = RADIUS
+    radius = max_x / 2 + 20
+    width = 40
 
-            font_size = "%.1f" % (2 * MAX_SIZE)
-            
-            x = []
-            y = []
-            r = radius + continent["order"] * (0.5 * margin)
-            for i in range(2):
-                angle = -2 * math.pi * (lon[i] / 360)
-                x[i] = x_center + r * math.cos(angle)
-                y[i] = y_center + r * math.sin(angle)
-                
-            large_arch_flag = 0
-            sweep_flag = 0
-            theta_delta = (lon[1] - lon[0])/180
-            if theta_delta > math.pi:
-                large_arch_flag = 1
+    for continent in continents:
+        name = continent["name"]
+        mid_lon = (continent["lon_start"] + continent["lon_end"]) / 2
+        lon = (continent["lon_start"], continent["lon_end"])
+        color = continent["color"] 
+        #convert to float
+        index = 0
+        while index < len(color): 
+            v = color[index]
+            color[index] = float(v / 255)
+            index += 1
+        shift = max_value * 1.1 * continent["order"]
 
-            r_name = r - radius * 0.015
-            name_center = (lon[1] + lon[0]) / 2
-            angle = -2 * 3.14 * (name_center/260)
-            rotate = 90 - name_center
-            while rotate < 0:
-                 rotate = rotate + 360
+        font_size = "%.1f" % (2 * MAX_SIZE)
+        
+        x = []
+        y = []
+        angle_list = []
+        r = radius + continent["order"] * (60)
+        for i in range(2):
+            angle = -2 * math.pi * (lon[i] / 360)
+            angle_list.append(angle)
+            x.append(x_center + r * math.cos(angle))
+            y.append(y_center + r * math.sin(angle))
             
-            x_name = x_center + r_name * math.cos(angle)
-            y_name = y_center + r_name * math.sin(angle)
+        large_arch_flag = 0
+        sweep_flag = 0
+        theta_delta = (lon[1] - lon[0])/180
+        if theta_delta > math.pi:
+            large_arch_flag = 1
+
+        r_name = r - radius * 0.015
+        name_center = (lon[1] + lon[0]) / 2
+        name_angle = -2 * math.pi * (name_center/360)
+        rotate = math.pi / 2 - (math.pi * name_center / 180)
+        while rotate < 0:
+             rotate = rotate + 2 * math.pi
+        
+        x_name = x_center + r_name * math.cos(name_angle)
+        y_name = y_center + r_name * math.sin(name_angle)
+   
+        
+        cr.move_to(x[0], y[0])
+        cr.arc_negative(x_center, y_center, r, angle_list[0], angle_list[1])
+        cr.set_line_width(width)
+        cr.set_source_rgb(color[0], color[1], color[2])
+        cr.stroke()
             
+        cr.select_font_face("Arial" , cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(float(font_size))
+        fascent, fdescent, fheight, fxadvance, fyadvance = cr.font_extents()
+        x_off, y_off, tw, th = cr.text_extents(name)[:4]
+        nx = -tw/2.0
+        ny = fheight/2 - 10
+
+        cr.save()
+        cr.translate(x_name, y_name)
+        cr.rotate(rotate)
+        cr.translate(nx, ny)
+        cr.move_to(0, 0)
+        cr.set_source_rgb(0, 0, 0)
+        cr.show_text(name)
+        cr.restore()
+
 #helper method for printGraph to print the color key onto the image
 def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
     max_x = new_max_x * 0.95
