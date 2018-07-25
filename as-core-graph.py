@@ -131,8 +131,8 @@ def main(argv):
     if args.org_name is not None:
         if args.org_name != "":
             drawing_mode = "target"
-            member_list = ParseOrg(url, args.org_name)
-            target_AS = ParseTargetLinks(url, member_list)
+            target_AS = ParseOrgMembers(url, args.org_name)
+            ParseOrgLinks(url, args.org_name)
         else:
             print_help()
             sys.exit()
@@ -160,7 +160,12 @@ def main(argv):
 
     min_x, min_y, max_x, max_y, max_value = SetUpPosition(url)
     PrintGraph(min_x, min_y, max_x, max_y, max_value)
-###########################\
+
+
+######################################################################
+## Download and Parse methods
+######################################################################
+
 #method to parse the first page of links
 def ParseFirstPage(url):
     global verbose
@@ -185,6 +190,7 @@ def ParseFirstPage(url):
         if asn1 not in seen_asns:
             seen_asns.add(asn1)
             ParseAsn(url, asn1) 
+
 #method to parse links of target AS
 def ParseTargetLinks(url, target_list):
     global verbose
@@ -211,6 +217,7 @@ def ParseTargetLinks(url, target_list):
         links.extend(link_data)
     
     return target_AS
+
 #method to parse single link
 def ParseSingleLink(url, link_data):
     global verbose    
@@ -237,45 +244,59 @@ def ParseSingleLink(url, link_data):
     link_data["asn0"] = int(asn0)
     link_data["asn1"] = int(asn1)    
     links.append(link_data)
+
 #method to parse organization name and get member list to set targets
-def ParseOrg(url, org_name):
+def ParseOrgMembers(url, org_name):
     global verbose
-    global target_AS 
-    new_url = url + "/orgs/" + org_name
+    url += "/orgs/" + org_name+ "/members"
      
     if verbose:
-        print ("loading",new_url)
-    org_json = url_load(new_url)
-    members = org_json["data"]["members"]
-    return members     
+        print ("loading",url)
+
+    asns = set()
+    for asn in download_paged_data(url):
+        asns.add(asn)
+    return asns
+
+def ParseOrgLinks(url, org_name):
+    global verbose 
+    global asns
+    global links
+    links = []
+
+    url = url + "/orgs/" + org_name+ "/neighbors?populate"
+    if verbose:
+        print ("loading",url)
+    seen_asn = set()
+    for org_links in download_paged_data(url):
+        for link in org_links["links"]:
+            links.append({
+                    "relationship":link["relationship"],
+                    "asn0":int(link["asn0"]["id"]),
+                    "asn1":int(link["asn1"]["id"]),
+                })
+            for asn_info in [link["asn0"],link["asn1"]]:
+                asn = asn_info["id"]
+                if asn not in seen_asn:
+                    asns.append(asn_info)
+                    seen_asn.add(asn)
+
 #method to parse a single asn
 def ParseAsn(url, asn): 
     global asns
-    new_url = url + "/asns/" + asn
+    url += "/asns/" + asn
     
-    asn_json = url_load(new_url)
+    asn_json = url_load(url)
     asn_data = asn_json["data"] 
     asns.append(asn_data)
 
 #method to populate links array with object data from url
 def ParseLinks(url):
     global verbose
-    new_url = url + "/links"
+    url = url + "/links"
     if verbose:
-        print ("loading",new_url)
-
-    links_json = url_load(new_url)
-    link_total = links_json["total"]
-    page_count = 1;
-    link_data = links_json["data"]
-    #loop through until data array is empty
-    while(len(link_data) > 0):
-        links.extend(link_data)
-        page_count += 1
-        new_url = url + "/links?page=" + str(page_count)
-        links_json = url_load(new_url)
-        link_data = links_json["data"]
-    return links
+        print ("loading",url)
+    return download_paged_data(url)
 
 #method to populate asn array with object data from url
 def ParseAsns(url):
@@ -283,19 +304,7 @@ def ParseAsns(url):
     url = url + "/asns?populate&ranked"
     if verbose:
         print ("loading",url)
-    
-    asn_json = url_load(url)
-    asn_total = asn_json["total"]
-    page_count = 1;
-    asn_data = asn_json["data"] 
-    #loop through until data array is empty  
-    while(len(asn_data) > 0):
-        asns.extend(asn_data)
-        page_count += 1
-        new_url =  url + "&page=" + str(page_count)
-        asn_json = url_load(new_url)
-        asn_data = asn_json["data"]
-    return asns
+    return download_paged_data(url)
 
 #method to pull data from online url
 def download(url):
@@ -325,6 +334,24 @@ def url_load(url):
         sys.stderr.write("failed to download"+url)
         sys.exit()
     return res
+
+def download_paged_data(url):
+    global verbose
+    if not re.search("\?",url):
+        url += "?";
+    else:
+        url += "&";
+    objects = []
+    page_count = 1
+    while True:
+        new_url =  url + "&page=" + str(page_count)
+        data = url_load(new_url)
+        if len(data["data"]) < 1:
+            return objects
+        objects.extend(data["data"])
+        page_count += 1
+
+
 '''
 #method to populate links array with object data from links file
 def ParseLinks(fname):
