@@ -9,6 +9,9 @@ import cairo
 import urllib.request
 import urllib.parse
 import urllib.error
+from gi import require_version
+require_version('Rsvg', '2.0')
+from gi.repository import Rsvg
 
 #boolean controlling whether to print messages about run status
 verbose = False
@@ -693,11 +696,12 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
         surface = cairo.PDFSurface(output_file, WIDTH, HEIGHT)
     if file_format == "SVG":
         print("using svg") 
+        handle = Rsvg.Handle()
         surface = cairo.SVGSurface(output_file, WIDTH, HEIGHT)
     if file_format == "PNG":
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT) 
     cr = cairo.Context(surface)
-	
+
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:
         PrintKey(cr, new_max_x, new_max_y, max_value, scale)
@@ -707,8 +711,6 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     PrintLinks(cr, max_value, scale)
     PrintNodes(cr, scale)
 
-    
-
 	# We do not need suppport for this now
 	#if (defined $name_file) {
 	#    PrintNames(@nodes);
@@ -717,11 +719,25 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 	#$max_x = PrintKey($max_x,$max_y, $max_value);
 	#}
 	#PrintEnder();
+    if file_format == "SVG":
+        PrintTitle(cr, handle)
     if file_format == "PNG":
         surface.write_to_png(output_file) 
     return
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
+    return
+#helper method for printGraph to print the title and link onto the image
+def PrintTitle(cr, handle):
+    svg_data = str(
+        <svg xmlns=http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">
+          <a xlink:href="http://www.google.com">
+            <rect x="10" y="25" width="15" height="15" fill="#6BCAF2" stroke="black" stroke-width="0.5"></rect> 
+          </a>
+        </svg>)
+    svg_data = bytes(svg_data, "utf-8")
+    svg = handle.new_from_data(svg_data)
+    svg.render_cairo(cr)
     return
 #helper method for printGraph to print the links onto the image
 def PrintLinks(cr, max_value, scale):
