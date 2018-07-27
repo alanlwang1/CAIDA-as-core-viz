@@ -394,7 +394,10 @@ def GetMaxValue(url):
     max_AS = max_json["data"][0]
     max_value = key_function(max_AS)
     return max_value
+#method to change sizes of selected target AS and their links
 def TargetChangeSize():
+    print(asSearch(3356))
+    print(asSearch(3549))
     for AS in asns:
         AS["size"] = AS["size"] * 1.10
     for target_id in target_AS:
@@ -402,7 +405,14 @@ def TargetChangeSize():
         if target != None:
             target["size"] = MAX_SIZE * 1.10
             target["color"] = (1, 1, 1)
-           
+    print(target_AS)
+    for link in links: 
+        if str(link["asn0"]) in target_AS and str(link["asn1"]) in target_AS:
+            link["is_target"] = True
+            link["color"] = (0, 0, 0)
+        else:
+            link["is_target"] = False
+             
 ###########################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition(url):
@@ -498,9 +508,6 @@ def SetUpPosition(url):
     max_x -= min_x
     max_y -= min_y
     min_x = min_y = 0
-    
-    if len(target_AS) != 0:
-        TargetChangeSize()
 
 	#link stuff
     if verbose:
@@ -514,6 +521,7 @@ def SetUpPosition(url):
     while linkIndex < len(links):
         #move loop forward
         link = links[linkIndex]
+        #print(link["asn0"], link["asn1"])
         #create pair of AS objects using asn number data in link
         as1 = asSearch(link["asn0"])
         as2 = asSearch(link["asn1"])
@@ -557,7 +565,8 @@ def SetUpPosition(url):
 
         linkIndex += 1
     
-
+    if len(target_AS) != 0:
+        TargetChangeSize()
    
     print ("numNodes:", len(asns),"numSkipped:",num_asn_skipped)
     print ("numLinks:", len(links),"numSkipped:",num_links_skipped) 
@@ -704,7 +713,7 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     if print_continents:
         PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value, scale)   
     cr.translate(margin - 15, margin - 15)
-    PrintLinks(cr, max_value, scale)
+    PrintLinks(cr, scale)
     PrintNodes(cr, scale)
 
     
@@ -724,7 +733,7 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
     return
 #helper method for printGraph to print the links onto the image
-def PrintLinks(cr, max_value, scale):
+def PrintLinks(cr, scale):
     seen = set()
     for link in links:
         x1 = link["x1"] * scale 
@@ -735,14 +744,27 @@ def PrintLinks(cr, max_value, scale):
         width = link["width"]
         linkInfo = ("links", x1, y1, x2, y2, color)
         #skip if is duplicate
-        if linkInfo not in seen:
+        if linkInfo not in seen and link["is_target"] == False:
             seen.add(linkInfo)			
-            #draw line
-            cr.move_to(x1,y1)
-            cr.line_to(x2, y2)
-            cr.set_source_rgb(color[0], color[1], color[2])
-            cr.set_line_width(link["width"])
-            cr.stroke()			
+            PrintLink(cr, link, scale)
+
+    for link in links:	
+        if link["is_target"] == True:
+            PrintLink(cr, link, scale)
+    return
+def PrintLink(cr, link, scale):
+    x1 = link["x1"] * scale 
+    y1 = link["y1"] * scale
+    x2 = link["x2"] * scale
+    y2 = link["y2"] * scale
+    color = link["color"]
+    width = link["width"]
+
+    cr.move_to(x1,y1)
+    cr.line_to(x2, y2)
+    cr.set_source_rgb(color[0], color[1], color[2])
+    cr.set_line_width(width)
+    cr.stroke()	
     return
 #helper method for printGraph to print the nodes onto the image
 def PrintNodes(cr, scale):
@@ -758,10 +780,16 @@ def PrintNodes(cr, scale):
         #decrease size so that dots arent too big 
         size = AS["size"] * scale
         color = AS["color"]
-        nodeInfo = ("nodes", size, x, y, color)
+        node_info = ("nodes", size, x, y, color)
         #skip if is duplicate
-        if nodeInfo not in seen:
+        if node_info not in seen and AS["id"] not in target_AS:
+            seen.add(node_info)
             PrintNode(cr, AS, scale)
+
+    for AS in asns:
+        if AS["id"] in target_AS:
+            PrintNode(cr, AS, scale)
+
     #if focus_asn_node is not None:
         #PrintNode(cr, focus_asn_node, scale)
     return
