@@ -396,8 +396,6 @@ def GetMaxValue(url):
     return max_value
 #method to change sizes of selected target AS and their links
 def TargetChangeSize():
-    print(asSearch(3356))
-    print(asSearch(3549))
     for AS in asns:
         AS["size"] = AS["size"] * 1.10
     for target_id in target_AS:
@@ -405,7 +403,6 @@ def TargetChangeSize():
         if target != None:
             target["size"] = MAX_SIZE * 1.10
             target["color"] = (1, 1, 1)
-    print(target_AS)
     for link in links: 
         if str(link["asn0"]) in target_AS and str(link["asn1"]) in target_AS:
             link["is_target"] = True
