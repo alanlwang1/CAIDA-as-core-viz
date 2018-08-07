@@ -258,6 +258,7 @@ def ParseOrgMembers(url, org_name):
         asns.add(asn)
     return asns
 
+#method to parse organization links - will need to update later when api changes
 def ParseOrgLinks(url, org_name):
     global verbose 
     global asns
@@ -387,6 +388,11 @@ def jsonl_load(filename):
             objects.append(decoder.decode(line))
     return objects
 '''
+
+######################################################################
+## Other Helper methods
+######################################################################
+
 #method to get the max value when not using full graph
 def GetMaxValue(url):
     url = url+"/asns?populate&ranked&count=1"
@@ -394,16 +400,35 @@ def GetMaxValue(url):
     max_AS = max_json["data"][0]
     max_value = key_function(max_AS)
     return max_value
+
+#method to change sizes to make target AS more noticable
 def TargetChangeSize():
     for AS in asns:
         AS["size"] = AS["size"] * 1.10
+
     for target_id in target_AS:
         target = asSearch(int(target_id))
         if target != None:
             target["size"] = MAX_SIZE * 1.10
             target["color"] = (1, 1, 1)
-           
-###########################
+
+#helper function to get the customer cone asns of an AS
+def CustomerConeAsnes(AS):
+    if "cone" not in AS or "asns" not in AS["cone"]:
+        return None
+    else:
+        return AS["cone"]["asns"]
+
+#helper method to search for AS using number from link
+def asSearch(asNum):
+    if asNum not in asn_dict:
+        return None
+    else:
+	    return asn_dict[asNum]
+
+######################################################################
+## Methods to assign positions and colors
+######################################################################
 #method to determine positions of all asn nodes and links based on data
 def SetUpPosition(url):
     #bounds for graph
@@ -417,8 +442,10 @@ def SetUpPosition(url):
     num_asn_skipped = 0
     #index for traversing through asn list
     asIndex = 0
+
     if verbose:
         print("numNodes:",len(asns))
+
     while asIndex < len(asns): 
         AS = asns[asIndex]
         value = key_function(AS)
@@ -445,6 +472,7 @@ def SetUpPosition(url):
     #get max value from url 
     max_value = GetMaxValue(url)
     print("maxValue:" + str(max_value) + "\n")
+
     #set min max x y based on max value
     radius = (math.log(max_value+1) - math.log(1+1) +.5)*100
     min_x = radius * math.cos(math.pi)
@@ -454,9 +482,8 @@ def SetUpPosition(url):
     
     if verbose:
         print("Assigning coordinates to nodes (num nodes:",len(asns),")")
+
     #loop through current asn list, calculating and adding coordinates to each asn  
-    #focus_x = 0
-    #focus_y = 0
     for AS in asns:
         value = key_function(AS)
         angle = -2 * 3.14 * float(AS["longitude"]) / 360
@@ -471,38 +498,23 @@ def SetUpPosition(url):
         AS["size"] = size
         AS["color"] = Value2Color(value/max_value)
         
-        #store x and y values outside loop if AS is focus asn
-        #if focus_asn == int(AS["id"]):
-            #focus_x = AS["x"]
-            #focus_y = AS["y"]
-    '''
-    for AS in asns:
-        x = AS["x"]
-        y = AS["y"]
-        size = AS["size"]
-        #if using fisheye effect
-        if focus_asn > -1:
-            size = AS["size"]
-            old_x0 = x
-            old_x1 = x + size
-            new_coords = FishEye(x, y, focus_x, focus_y)
-            AS["x"]  = x = new_coords[0]
-            AS["y"]  = y = new_coords[1]
-    '''
     #increase min max x y slightly, move all ASNes to adjust 
     min_x += min_x*.05
     min_y += min_y*.05
+
     for AS in asns:
         AS["x"] -= min_x
         AS["y"] -= min_y  
+
     max_x -= min_x
     max_y -= min_y
     min_x = min_y = 0
     
+    #if targets exist, change sizes
     if len(target_AS) != 0:
         TargetChangeSize()
 
-	#link stuff
+	#links
     if verbose:
         print("Assigning coordinates to links (num links:",len(links),")")
     
@@ -510,6 +522,7 @@ def SetUpPosition(url):
     num_links_skipped = 0;
     #index for traversing through link list  
     linkIndex = 0
+
     #loop through links, removing links with skipped asn and assigning coordinates to others
     while linkIndex < len(links):
         #move loop forward
@@ -526,6 +539,7 @@ def SetUpPosition(url):
                 #replace link at current position with lastl ink in list
                 links[linkIndex] = temp
             continue
+
         as_pair = (as1, as2)
         #find greatest value in the pair and assign to link
         for AS in as_pair:
@@ -535,7 +549,6 @@ def SetUpPosition(url):
             elif value < link[selected_key]:
                 link[selected_key] = value
 		
-        #get coordinates
         #get information to draw line
         size1 = as1["size"]
         size2 = as2["size"]
@@ -544,46 +557,34 @@ def SetUpPosition(url):
         link["y1"] = as1["y"]+ (size1 / 2)
         link["x2"] = as2["x"]+ (size2 / 2)
         link["y2"] = as2["y"]+ (size2 / 2) 
-        #calculate distance for sorting
-        #link["distance"] = math.sqrt(math.pow(link["x2"] - link["x1"], 2) + math.pow(link["y2"] - link["y1"], 2)) 
+
         #calculate color
         value = link[selected_key]
         link["color"] = Value2Color(value/max_value)
 
+        #change link width if target
         if len(target_AS) != 0:
             link["width"] = 2
         else:
             link["width"] = 0.5
 
         linkIndex += 1
-    
-
-   
+     
     print ("numNodes:", len(asns),"numSkipped:",num_asn_skipped)
     print ("numLinks:", len(links),"numSkipped:",num_links_skipped) 
     return min_x, min_y, max_x, max_y, max_value
 
-#helper function to get the customer cone asns of an AS
-def CustomerConeAsnes(AS):
-    if "cone" not in AS or "asns" not in AS["cone"]:
-        return None
-    else:
-        return AS["cone"]["asns"]
-#helper method to search for AS using number from link
-def asSearch(asNum):
-    if asNum not in asn_dict:
-        return None
-    else:
-	    return asn_dict[asNum]
 #method to determine the color of a link/node on the visualization
 def Value2Color(new_value):
     value = new_value
     hue = 0
     sat = 0
     bri = 0
+
     #keep value greater than 0.000001
     if (value <= 0.000001):
         value = .000001
+
     temp = math.log( (120*value)+1)/math.log(121)
     if not grayscale:
         hue = (4+5*temp)/8
@@ -593,9 +594,9 @@ def Value2Color(new_value):
         hue = 1
         sat = 100*temp
         bri = 80*temp+20
+
     #get rgb based on provided data
     rgb_list = hsv2rgb(360*hue, sat, bri)
-
     #convert values to floating point to use with cairo
     index = 0
     while index < len(rgb_list): 
@@ -603,6 +604,7 @@ def Value2Color(new_value):
         rgb_list[index] = float(v / 255)
         index += 1
     return (rgb_list[0], rgb_list[1], rgb_list[2])
+
 #helper method for Value2Color to determine color of a link/node on the visualization
 def hsv2rgb (new_h, new_s, new_v):  
     h = new_h
@@ -612,6 +614,7 @@ def hsv2rgb (new_h, new_s, new_v):
     r = 0
     g = 0
     b = 0
+
 	#keep hue between 0 and 360
     if h < 0:
         h = 0
@@ -623,6 +626,7 @@ def hsv2rgb (new_h, new_s, new_v):
 
     s /= 100
     v /= 100
+
     #change rgb based on hue
     if (int(h) == 0):
         r = v * 255;
@@ -649,31 +653,20 @@ def hsv2rgb (new_h, new_s, new_v):
         g = v * 255 * (1 - s)
         b = v * (255 - s * f)
     return [r, g, b]
-#helper function to apply fisheye effect to a pair of xy coordinates 
-def FishEye(x, y, focus_x, focus_y):
-    #calculate distance and angle from focus point 
-    angle = math.atan2(y - focus_y, x - focus_x) 
-    r = math.sqrt(math.pow(x-focus_x, 2) + math.pow(y - focus_y, 2))
-    #focal length of the "lens"  
-    f = 300
-    #angle from optical axis
-    theta = math.atan2(r,f)
-    #calculate new distance from focus point
-    new_r = math.tan(theta/2) * 2 * f
-    #new_r = theta * f    
-    #new_r = 2 * f * math.sin(theta/2)
-    #new_r = f * math.sin(theta)    
-    new_x = focus_x + (new_r * math.cos(angle))
-    new_y = focus_y + (new_r * math.sin(angle)) 
-    return (new_x, new_y)
-    
+
+######################################################################
+## Print methods
+######################################################################
+
 #method to print the visualization onto an image
 def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):  
     global asns
     global links
+
     #sort nodes and links lists
     asns = sorted(asns, key = key_function)
-    links = sorted(links, key = lambda link: link[selected_key])    
+    links = sorted(links, key = lambda link: link[selected_key])  
+  
     # Make calls to PyCairo
     #set up drawing area
     scale = 0.6
@@ -687,7 +680,8 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
         max_y = new_max_y * scale
         WIDTH = int(max_x) + margin * 2
         HEIGHT = int(max_y) + margin * 2
- 
+
+    #set up file format
     if file_format == "PDF":
         print("using pdf")
         surface = cairo.PDFSurface(output_file, WIDTH, HEIGHT)
@@ -698,16 +692,15 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT) 
     cr = cairo.Context(surface)
 	
+    #print everything
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:
-        PrintKey(cr, new_max_x, new_max_y, max_value, scale)
+        PrintKey(cr, new_max_x, new_max_y, max_value)
     if print_continents:
-        PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value, scale)   
+        PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value)   
     cr.translate(margin - 15, margin - 15)
     PrintLinks(cr, max_value, scale)
     PrintNodes(cr, scale)
-
-    
 
 	# We do not need suppport for this now
 	#if (defined $name_file) {
@@ -720,9 +713,11 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     if file_format == "PNG":
         surface.write_to_png(output_file) 
     return
+
 #helper method for printGraph to print the header onto the image
 def PrintHeader(cr, min_x,min_y,max_x,max_y):
     return
+
 #helper method for printGraph to print the links onto the image
 def PrintLinks(cr, max_value, scale):
     seen = set()
@@ -744,14 +739,12 @@ def PrintLinks(cr, max_value, scale):
             cr.set_line_width(link["width"])
             cr.stroke()			
     return
+
 #helper method for printGraph to print the nodes onto the image
 def PrintNodes(cr, scale):
     seen = set()
     #focus_asn_node = None
     for AS in asns:
-        #if int(AS["id"]) == focus_asn:
-            #focus_asn_node = AS
-            #continue
         #calculate coordinates and get colors
         x = AS["x"] * scale 
         y = AS["y"] * scale
@@ -762,9 +755,8 @@ def PrintNodes(cr, scale):
         #skip if is duplicate
         if nodeInfo not in seen:
             PrintNode(cr, AS, scale)
-    #if focus_asn_node is not None:
-        #PrintNode(cr, focus_asn_node, scale)
     return
+
 def PrintNode(cr, AS, scale):
     #calculate coordinates and get colors
     x = AS["x"] * scale 
@@ -772,6 +764,7 @@ def PrintNode(cr, AS, scale):
     #decrease size so that dots arent too big 
     size = AS["size"] * scale
     color = AS["color"]
+
     #save current context with no path
     cr.save()
     #plot point
@@ -785,8 +778,10 @@ def PrintNode(cr, AS, scale):
     cr.stroke()
     #restore to saved context to wipe path
     cr.restore()
+    return
+
 #helper method for printGraph to print the continent halo onto the image
-def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value, scale):
+def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
     continents =  [
         {
             "name" : "North America",
@@ -862,12 +857,6 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value, scale):
             angle_list.append(angle)
             x.append(x_center + r * math.cos(angle))
             y.append(y_center + r * math.sin(angle))
-            
-        large_arch_flag = 0
-        sweep_flag = 0
-        theta_delta = (lon[1] - lon[0])/180
-        if theta_delta > math.pi:
-            large_arch_flag = 1
 
         r_name = r - radius * 0.015
         name_center = (lon[1] + lon[0]) / 2
@@ -901,9 +890,10 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value, scale):
         cr.set_source_rgb(0, 0, 0)
         cr.show_text(name)
         cr.restore()
+    return
 
 #helper method for printGraph to print the color key onto the image
-def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
+def PrintKey(cr, new_max_x, new_max_y, new_max_value):
     max_x = new_max_x * 0.95
     max_y = new_max_y * 0.8
     max_value = new_max_value
@@ -948,7 +938,6 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
 
         x2 = key_x + key_width        
         y2 = y1
-
 		
         cr.move_to(x1,y1)
         cr.line_to(x2, y2)
@@ -957,5 +946,7 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value, scale):
         cr.stroke()
         cr.move_to(x2 + 10, y2)
         cr.show_text(number)
+    return
+
 #run the main method
 main(sys.argv[1:])
