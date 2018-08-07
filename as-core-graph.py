@@ -41,7 +41,10 @@ selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
 key_function = None
 #width of margin around image
-margin = 10
+outer_margin = 10
+inner_margin = 10
+#pixel size of image
+image_size = -1 
 
 #method to print how to run script
 def print_help():
@@ -59,7 +62,9 @@ def main(argv):
     global target_AS
     global output_file
     global file_format
-    global margin
+    global outer_margin
+    global inner_margin
+    global image_size
 
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
@@ -75,6 +80,7 @@ def main(argv):
     parser.add_argument("-O", type=str, default=None, nargs='?', const="", dest="org_name", help="Organization name of members to focus on")
     parser.add_argument("-o", type=str, default=None, nargs='?', const="", dest="output_file", help="Name of output file to write graph to")
     parser.add_argument("-f", type=str, default="PNG", nargs='?', const="", dest="file_format", choices=["SVG","PDF","PNG"], help="file format of output file to write graph to")
+    parser.add_argument("-s", type=int, default=None, nargs='?', const=-1, dest="image_size", help="Pixel size of output image")
     args = parser.parse_args()
 
     url = None
@@ -85,14 +91,7 @@ def main(argv):
         url = args.url
         if not re.search("^http",url):
             url = "http://"+url
-    '''
-    if args.focus is not None:
-        if args.focus > -1:
-            focus_asn = args.focus
-        else: 
-            print_help()
-            sys.exit()
-    '''
+
     if args.print_key:
         print_key = True
 
@@ -100,7 +99,7 @@ def main(argv):
         verbose = True
     
     if args.print_continents:
-        margin = 110
+        inner_margin = 110
         print_continents = True
 
     if args.first_page is not None:
@@ -150,6 +149,14 @@ def main(argv):
         else:
             print_help()
             sys.exit()
+
+    if args.image_size is not None:
+        if args.image_size > -1:
+            image_size = args.image_size
+        else:
+            print_help()
+            sys.exit()
+            
     #if drawing mode is still the default
     if drawing_mode == "full": 
         asns = ParseAsns(url)
@@ -659,9 +666,10 @@ def hsv2rgb (new_h, new_s, new_v):
 ######################################################################
 
 #method to print the visualization onto an image
-def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):  
+def PrintGraph(min_x, min_y, max_x, max_y, max_value):  
     global asns
     global links
+    global image_size
 
     #sort nodes and links lists
     asns = sorted(asns, key = key_function)
@@ -669,17 +677,13 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
   
     # Make calls to PyCairo
     #set up drawing area
-    scale = 0.6
-    if print_key:
-        max_x = new_max_x * scale
-        max_y = new_max_y * scale
-        WIDTH = int(new_max_x) 
-        HEIGHT = int(new_max_y * 0.8) 
+    if image_size > -1:
+        WIDTH = image_size
+        HEIGHT = image_size 
     else:
-        max_x = new_max_x * scale
-        max_y = new_max_y * scale
-        WIDTH = int(max_x) + margin * 2
-        HEIGHT = int(max_y) + margin * 2
+        image_size = max_x
+        WIDTH = int(max_x) + inner_margin
+        HEIGHT = int(max_y) + inner_margin
 
     #set up file format
     if file_format == "PDF":
@@ -691,16 +695,22 @@ def PrintGraph(min_x, min_y, new_max_x, new_max_y, max_value):
     if file_format == "PNG":
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT) 
     cr = cairo.Context(surface)
-	
+
+    cr.translate(outer_margin - 15, outer_margin - 15)
+    cr.scale((image_size - inner_margin)/max_x, (image_size - inner_margin)/max_y)
+
     #print everything
     PrintHeader(cr, min_x,min_y,max_x,max_y)
-    if print_key:
-        PrintKey(cr, new_max_x, new_max_y, max_value)
+    if print_key:   
+        cr.translate(outer_margin, outer_margin + HEIGHT / 10)
+        PrintKey(cr, WIDTH, HEIGHT, max_x, max_y, max_value)
+        cr.scale(0.8, 0.8)
     if print_continents:
-        PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value)   
-    cr.translate(margin - 15, margin - 15)
-    PrintLinks(cr, max_value, scale)
-    PrintNodes(cr, scale)
+        PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value)
+        cr.translate(inner_margin - 25, inner_margin - 25)
+
+    PrintLinks(cr, max_value)
+    PrintNodes(cr)
 
 	# We do not need suppport for this now
 	#if (defined $name_file) {
@@ -722,13 +732,13 @@ def PrintHeader(cr, min_x,min_y,max_x,max_y):
     return
 
 #helper method for printGraph to print the links onto the image
-def PrintLinks(cr, max_value, scale):
+def PrintLinks(cr, max_value):
     seen = set()
     for link in links:
-        x1 = link["x1"] * scale 
-        y1 = link["y1"] * scale
-        x2 = link["x2"] * scale
-        y2 = link["y2"] * scale
+        x1 = link["x1"] 
+        y1 = link["y1"] 
+        x2 = link["x2"] 
+        y2 = link["y2"] 
         color = link["color"]
         width = link["width"]
         linkInfo = ("links", x1, y1, x2, y2, color)
@@ -744,28 +754,28 @@ def PrintLinks(cr, max_value, scale):
     return
 
 #helper method for printGraph to print the nodes onto the image
-def PrintNodes(cr, scale):
+def PrintNodes(cr):
     seen = set()
     #focus_asn_node = None
     for AS in asns:
         #calculate coordinates and get colors
-        x = AS["x"] * scale 
-        y = AS["y"] * scale
+        x = AS["x"]  
+        y = AS["y"] 
         #decrease size so that dots arent too big 
-        size = AS["size"] * scale
+        size = AS["size"] 
         color = AS["color"]
         nodeInfo = ("nodes", size, x, y, color)
         #skip if is duplicate
         if nodeInfo not in seen:
-            PrintNode(cr, AS, scale)
+            PrintNode(cr, AS)
     return
 
-def PrintNode(cr, AS, scale):
+def PrintNode(cr, AS):
     #calculate coordinates and get colors
-    x = AS["x"] * scale 
-    y = AS["y"] * scale
+    x = AS["x"]
+    y = AS["y"]
     #decrease size so that dots arent too big 
-    size = AS["size"] * scale
+    size = AS["size"]
     color = AS["color"]
 
     #save current context with no path
@@ -830,8 +840,8 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
         }
         ]
         
-    x_center = max_x / 2 + margin
-    y_center = max_y / 2 + margin 
+    x_center = max_x / 2 + inner_margin
+    y_center = max_y / 2 + inner_margin 
     #radius = RADIUS
     radius = max_x / 2 + 20
     width = 40
@@ -883,7 +893,7 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
         fascent, fdescent, fheight, fxadvance, fyadvance = cr.font_extents()
         x_off, y_off, tw, th = cr.text_extents(name)[:4]
         nx = -tw/2.0
-        ny = fheight/2 - 10
+        ny = fheight/2 - 20
 
         cr.save()
         cr.translate(x_name, y_name)
@@ -896,17 +906,17 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
     return
 
 #helper method for printGraph to print the color key onto the image
-def PrintKey(cr, new_max_x, new_max_y, new_max_value):
+def PrintKey(cr, WIDTH, HEIGHT, new_max_x, new_max_y, new_max_value):
     max_x = new_max_x * 0.95
     max_y = new_max_y * 0.8
     max_value = new_max_value
 
     key_width = max_x / 45 
     key_x_margin = key_width * 0.2
-    key_x = max_x - key_width - key_x_margin 
+    key_x = (WIDTH * max_x / (image_size - inner_margin)) - key_width - key_x_margin
 
-    key_height = 6 * max_y / 10 
-    key_y = (max_y - key_height) / 2
+    key_height = 8 * max_y / 10 
+    key_y = ((HEIGHT * max_y / (image_size - inner_margin)) - key_height) / 2
 	
     num_bars = 200
     if max_value > 0 and max_value < num_bars:
@@ -947,7 +957,7 @@ def PrintKey(cr, new_max_x, new_max_y, new_max_value):
         cr.set_source_rgb(0, 0, 0)
         cr.set_line_width(2)
         cr.stroke()
-        cr.move_to(x2 + 10, y2)
+        cr.move_to(x2 + 15, y2)
         cr.show_text(number)
     return
 
