@@ -138,7 +138,10 @@ def main(argv):
 
     if args.output_file is not None:
         if args.output_file != "":
-            output_file = args.output_file
+            if args.output_file == "-":
+                output_file = sys.stdout.buffer
+            else:
+                output_file = args.output_file
         else:
             print_help()
             sys.exit()
@@ -721,10 +724,7 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	#}
 	#PrintEnder();
     if file_format == "PNG":
-        if output_file == "-":
-            surface.write_to_png(sys.stdout.buffer)
-        else:
-            surface.write_to_png(output_file) 
+        surface.write_to_png(output_file) 
     return
 
 #helper method for printGraph to print the header onto the image
