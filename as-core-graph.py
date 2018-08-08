@@ -468,6 +468,9 @@ def SetUpPosition(url):
             num_asn_skipped += 1
             #pop last AS from end of list
             temp = asns.pop();
+            #print error message if AS was a target
+            if AS["id"] in target_AS:
+                sys.stderr.write("Error: AS " + AS["id"] + " has no longitude, skipped\n")
             #if not at the end of the list
             if asIndex < len(asns):
                 #replace the asn at current position with last asn
