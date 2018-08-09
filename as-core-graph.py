@@ -40,9 +40,10 @@ file_format = "PNG"
 selected_key = "customer_cone_asnes"
 #function to retrieve the metric value from AS
 key_function = None
-#width of margin around image
+#width of margin around entire image
 outer_margin = 10
-inner_margin = 10
+#margin for continent halo 
+inner_margin = 0
 #pixel size of image
 image_size = -1 
 
@@ -99,7 +100,7 @@ def main(argv):
         verbose = True
     
     if args.print_continents:
-        inner_margin = 110
+        inner_margin = 100
         print_continents = True
 
     if args.first_page is not None:
@@ -510,10 +511,6 @@ def SetUpPosition(url):
         AS["y"] = y
         AS["size"] = size
         AS["color"] = Value2Color(value/max_value)
-        
-    #increase min max x y slightly, move all ASNes to adjust 
-    min_x += min_x*.05
-    min_y += min_y*.05
 
     for AS in asns:
         AS["x"] -= min_x
@@ -676,6 +673,10 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
     global asns
     global links
     global image_size
+    WIDTH = int(max_x) + 2 * inner_margin
+    HEIGHT = int(max_y) + 2 * inner_margin
+    image_width = image_size
+    image_height = image_size
 
     #sort nodes and links lists
     asns = sorted(asns, key = key_function)
@@ -683,37 +684,36 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
   
     # Make calls to PyCairo
     #set up drawing area
-    if image_size > -1:
-        WIDTH = image_size
-        HEIGHT = image_size 
-    else:
-        image_size = max_x
-        WIDTH = int(max_x) + inner_margin
-        HEIGHT = int(max_y) + inner_margin
-
+    if image_size == -1:
+        image_size = WIDTH
+        image_width = WIDTH
+        image_height = HEIGHT
+    if print_key:
+        key_width = WIDTH / 45 
+        key_x_margin = key_width
+        key_text_x = key_width * 1.8
+        image_width = int(image_width + ((image_size - 2 * outer_margin) / WIDTH) * (key_x_margin + key_width + key_text_x))
+        print(image_width)
     #set up file format
     if file_format == "PDF":
         print("using pdf")
-        surface = cairo.PDFSurface(output_file, WIDTH, HEIGHT)
+        surface = cairo.PDFSurface(output_file, image_width, image_height)
     if file_format == "SVG":
         print("using svg") 
-        surface = cairo.SVGSurface(output_file, WIDTH, HEIGHT)
+        surface = cairo.SVGSurface(output_file, image_width, image_height)
     if file_format == "PNG":
-        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT) 
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, image_width, image_height) 
     cr = cairo.Context(surface)
-
-    cr.translate(outer_margin - 15, outer_margin - 15)
-    cr.scale((image_size - inner_margin)/max_x, (image_size - inner_margin)/max_y)
+    cr.translate(outer_margin, outer_margin)
+    cr.scale((image_size - 2 * outer_margin)/WIDTH, (image_size - 2 * outer_margin)/HEIGHT)
 
     #print everything
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:   
-        cr.translate(outer_margin, outer_margin + HEIGHT / 10)
-        PrintKey(cr, WIDTH, HEIGHT, max_x, max_y, max_value)
-        cr.scale(0.8, 0.8)
+        PrintKey(cr, image_width, WIDTH, HEIGHT, key_width, key_x_margin, key_text_x, max_x, max_y, max_value)
     if print_continents:
         PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value)
-        cr.translate(inner_margin - 25, inner_margin - 25)
+        cr.translate(inner_margin, inner_margin)
 
     PrintLinks(cr, max_value)
     PrintNodes(cr)
@@ -843,10 +843,10 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
         }
         ]
         
-    x_center = max_x / 2 + inner_margin
-    y_center = max_y / 2 + inner_margin 
+    x_center = WIDTH / 2
+    y_center = HEIGHT / 2
     #radius = RADIUS
-    radius = max_x / 2 + 20
+    radius = max_x / 2 + 25
     width = 40
 
     for continent in continents:
@@ -860,7 +860,7 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
             v = color[index]
             color[index] = float(v / 255)
             index += 1
-        shift = max_value * 1.1 * continent["order"]
+        shift = max_value * 1.5 * continent["order"]
 
         font_size = "%.1f" % (2 * MAX_SIZE)
         
@@ -909,18 +909,13 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
     return
 
 #helper method for printGraph to print the color key onto the image
-def PrintKey(cr, WIDTH, HEIGHT, new_max_x, new_max_y, new_max_value):
-    max_x = new_max_x * 0.95
-    max_y = new_max_y * 0.8
-    max_value = new_max_value
-
-    key_width = max_x / 45 
-    key_x_margin = key_width * 0.2
-    key_x = (WIDTH * max_x / (image_size - inner_margin)) - key_width - key_x_margin
+def PrintKey(cr, image_width, WIDTH, HEIGHT, key_width, key_x_margin, key_text_x, max_x, max_y, max_value):
+    key_x = WIDTH + key_x_margin
+    #key_x = max_x - outer_margin - key_width - key_text_x
 
     key_height = 8 * max_y / 10 
-    key_y = ((HEIGHT * max_y / (image_size - inner_margin)) - key_height) / 2
-	
+    key_y = (HEIGHT - key_height) / 2
+    print(key_x, key_y)
     num_bars = 200
     if max_value > 0 and max_value < num_bars:
         num_bars = max_value
