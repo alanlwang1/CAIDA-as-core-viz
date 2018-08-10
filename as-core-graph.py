@@ -18,8 +18,6 @@ grayscale = False
 print_key = False
 #boolean controlling whether to print continent halo on image
 print_continents = False
-#number of the asn to focus on with fisheye effect
-#focus_asn = -1 
 #array holding object data of asns from file
 asns = []
 #dictionary holding asns as keys to AS values
@@ -56,7 +54,6 @@ def main(argv):
     global print_key
     global print_continents
     global key_function
-    global focus_asn
     global drawing_mode
     global links
     global asns
@@ -70,7 +67,6 @@ def main(argv):
     parser = argparse.ArgumentParser()
     #parser.add_argument("-l", type=str, dest="links", help="loads in the asn links file")
     #parser.add_argument("-a", type=str, dest="asns", help="loads in the asn links file")   
-    #parser.add_argument("-f", type=int, nargs='?', const=-1, dest="focus", help="number of AS to focus on using fisheye effect")
     parser.add_argument("-u", type=str, dest="url", help="loads in the API url")
     parser.add_argument("-k", dest="print_key", help="prints out color key for visualization", action="store_true")
     parser.add_argument("-v", dest="verbose", help="prints out lots of messages", action="store_true")
@@ -460,12 +456,7 @@ def SetUpPosition(url):
     while asIndex < len(asns): 
         AS = asns[asIndex]
         value = key_function(AS)
-        if "longitude" not in AS or value is None or value <= 0:
-            '''
-            if focus_asn == int(AS["id"]):
-                sys.stderr.write("invalid focus asn")
-                sys.exit()
-            '''                               
+        if "longitude" not in AS or value is None or value <= 0:                             
             num_asn_skipped += 1
             #pop last AS from end of list
             temp = asns.pop();
@@ -688,12 +679,13 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
         image_size = WIDTH
         image_width = WIDTH
         image_height = HEIGHT
+
     if print_key:
         key_width = WIDTH / 45 
         key_x_margin = key_width
         key_text_x = key_width * 1.8
         image_width = int(image_width + ((image_size - 2 * outer_margin) / WIDTH) * (key_x_margin + key_width + key_text_x))
-        print(image_width)
+
     #set up file format
     if file_format == "PDF":
         print("using pdf")
@@ -703,6 +695,8 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
         surface = cairo.SVGSurface(output_file, image_width, image_height)
     if file_format == "PNG":
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, image_width, image_height) 
+
+    #set up surface
     cr = cairo.Context(surface)
     cr.translate(outer_margin, outer_margin)
     cr.scale((image_size - 2 * outer_margin)/WIDTH, (image_size - 2 * outer_margin)/HEIGHT)
@@ -710,11 +704,10 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
     #print everything
     PrintHeader(cr, min_x,min_y,max_x,max_y)
     if print_key:   
-        PrintKey(cr, image_width, WIDTH, HEIGHT, key_width, key_x_margin, key_text_x, max_x, max_y, max_value)
+        PrintKey(cr, WIDTH, HEIGHT, key_width, key_x_margin, max_x, max_y, max_value)
     if print_continents:
         PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value)
         cr.translate(inner_margin, inner_margin)
-
     PrintLinks(cr, max_value)
     PrintNodes(cr)
 
@@ -726,6 +719,7 @@ def PrintGraph(min_x, min_y, max_x, max_y, max_value):
 	#$max_x = PrintKey($max_x,$max_y, $max_value);
 	#}
 	#PrintEnder();
+
     if file_format == "PNG":
         surface.write_to_png(output_file) 
     return
@@ -759,7 +753,6 @@ def PrintLinks(cr, max_value):
 #helper method for printGraph to print the nodes onto the image
 def PrintNodes(cr):
     seen = set()
-    #focus_asn_node = None
     for AS in asns:
         #calculate coordinates and get colors
         x = AS["x"]  
@@ -848,13 +841,14 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
     #radius = RADIUS
     radius = max_x / 2 + 25
     width = 40
-
+    
+    #assign data for each continent 
     for continent in continents:
         name = continent["name"]
         mid_lon = (continent["lon_start"] + continent["lon_end"]) / 2
         lon = (continent["lon_start"], continent["lon_end"])
         color = continent["color"] 
-        #convert to float
+        #convert colors to float
         index = 0
         while index < len(color): 
             v = color[index]
@@ -884,20 +878,22 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
         x_name = x_center + r_name * math.cos(name_angle)
         y_name = y_center + r_name * math.sin(name_angle)
    
-        
+        #draw arc
         cr.move_to(x[0], y[0])
         cr.arc_negative(x_center, y_center, r, angle_list[0], angle_list[1])
         cr.set_line_width(width)
         cr.set_source_rgb(color[0], color[1], color[2])
         cr.stroke()
             
+        #get text data to angle text
         cr.select_font_face("Arial" , cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
         cr.set_font_size(float(font_size))
         fascent, fdescent, fheight, fxadvance, fyadvance = cr.font_extents()
         x_off, y_off, tw, th = cr.text_extents(name)[:4]
         nx = -tw/2.0
         ny = fheight/2 - 20
-
+        
+        #draw text
         cr.save()
         cr.translate(x_name, y_name)
         cr.rotate(rotate)
@@ -909,16 +905,15 @@ def PrintContinents(cr, WIDTH, HEIGHT, max_x, max_y, max_value):
     return
 
 #helper method for printGraph to print the color key onto the image
-def PrintKey(cr, image_width, WIDTH, HEIGHT, key_width, key_x_margin, key_text_x, max_x, max_y, max_value):
+def PrintKey(cr, WIDTH, HEIGHT, key_width, key_x_margin, max_x, max_y, max_value):
     key_x = WIDTH + key_x_margin
-    #key_x = max_x - outer_margin - key_width - key_text_x
-
     key_height = 8 * max_y / 10 
     key_y = (HEIGHT - key_height) / 2
-    print(key_x, key_y)
+
     num_bars = 200
     if max_value > 0 and max_value < num_bars:
         num_bars = max_value
+    #draw color bars
     for value in range(201):
         fraction = value/num_bars
         color = Value2Color(fraction)
@@ -937,6 +932,7 @@ def PrintKey(cr, image_width, WIDTH, HEIGHT, key_width, key_x_margin, key_text_x
     #cr.set_source_rgb(0,0,0)
     #cr.stroke()
     
+    #draw labels
     cr.select_font_face("Arial", cairo.FONT_SLANT_NORMAL, 
     cairo.FONT_WEIGHT_NORMAL)
     cr.set_font_size(key_width / 2)
