@@ -2,8 +2,8 @@
 ## AS Core python code 
 
 
-Original goal was to port scripts-old/make_svg_graph.pl to python  
-The script produces a graph that looks like this. 
+Original goal was to port scripts-old/make_svg_graph.pl to Python  
+The Python script uses PyCairo libraries to produce a graph that looks like this. 
 
     http://www.caida.org/research/topology/as_core_network/pics/2017/ascore-2017-feb-ipv4-poster-2048x1518.png
 
